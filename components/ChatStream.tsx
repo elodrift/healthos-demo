@@ -37,51 +37,64 @@ export function ChatStream() {
         ) : null}
       </AnimatePresence>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-4">
-        {revealedBeats.map((beat) => {
-          const highlighted = highlightBeatId === beat.id;
-          const onHover = (h: boolean) => setHighlight(h ? beat.id : null);
+      {/*
+       * The day plays itself, so new turns must be announced rather than
+       * silently painted. mt-auto keeps the conversation resting on the reply
+       * chips instead of stranding it at the top of a tall empty column.
+       */}
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        aria-label="Conversation with HealthOS"
+      >
+        <div className="mt-auto flex flex-col gap-4">
+          {revealedBeats.map((beat) => {
+            const highlighted = highlightBeatId === beat.id;
+            const onHover = (h: boolean) => setHighlight(h ? beat.id : null);
 
-          if (beat.kind === "message") {
-            return (
-              <MessageBubble
-                key={beat.id}
-                speaker={beat.speaker}
-                text={beat.text}
-                time={beat.time}
-                highlighted={highlighted}
-                onHover={onHover}
-              />
-            );
-          }
-          if (beat.kind === "card") {
-            return (
-              <CardRenderer
-                key={beat.id}
-                card={beat.card}
-                highlighted={highlighted}
-                onHover={onHover}
-              />
-            );
-          }
-          return null; // choice beats become chips; close beats are handled below
-        })}
+            if (beat.kind === "message") {
+              return (
+                <MessageBubble
+                  key={beat.id}
+                  speaker={beat.speaker}
+                  text={beat.text}
+                  time={beat.time}
+                  highlighted={highlighted}
+                  onHover={onHover}
+                />
+              );
+            }
+            if (beat.kind === "card") {
+              return (
+                <CardRenderer
+                  key={beat.id}
+                  card={beat.card}
+                  highlighted={highlighted}
+                  onHover={onHover}
+                />
+              );
+            }
+            return null; // choice beats become chips; close beats are handled below
+          })}
 
-        {typing ? <TypingIndicator /> : null}
+          {typing ? <TypingIndicator /> : null}
 
-        {isDone ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex flex-col items-center gap-1 py-2 text-center"
-          >
-            <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-ink-lo">
-              22:00 · day closed
-            </span>
-          </motion.div>
-        ) : null}
+          {isDone ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex flex-col items-center gap-1 py-2 text-center"
+            >
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-lo">
+                22:00 · day closed
+              </span>
+            </motion.div>
+          ) : null}
 
-        <div ref={endRef} />
+          <div ref={endRef} />
+        </div>
       </div>
 
       {pendingChoice ? (

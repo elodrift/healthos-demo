@@ -15,10 +15,14 @@ const config: Config = {
           500: "#33436C",
         },
         accent: {
+          /** the one brand accent: 10.4:1 on base-850 */
           green: "#3DDC97",
-          greendim: "#1C8F66",
-          /** reserved: the medical never-suspends card only */
-          red: "#E5484D",
+          /**
+           * Reserved for the medical never-suspends card only.
+           * Lifted from #E5484D (4.68:1) to 7.3:1 on base-850 — the safety rule
+           * is the one thing in the product that must never be hard to read.
+           */
+          red: "#FF7B72",
         },
         ink: {
           hi: "#F2F6FC",

@@ -21,7 +21,9 @@ export function TimelineScrubber({
   const pct = stops.length > 1 ? (activeStop / (stops.length - 1)) * 100 : 0;
 
   return (
-    <div className="border-b border-base-700 bg-base-900/95 px-3 py-2.5">
+    // px-6: the first and last time labels are centred on their dots, so the
+    // track needs half a label of breathing room or 06:30 / 22:00 get clipped.
+    <div className="border-b border-base-700 bg-base-900/95 px-6 py-2.5">
       <div className="relative h-1.5 rounded-full bg-base-700">
         <motion.div
           className="absolute inset-y-0 left-0 rounded-full bg-accent-green"
@@ -40,12 +42,12 @@ export function TimelineScrubber({
               disabled={!reached}
               aria-label={reached ? `Replay from ${t}` : `${t} — not reached yet`}
               aria-current={i === activeStop ? "step" : undefined}
-              className={`-mt-3 flex flex-col items-center gap-1 rounded px-1 py-0.5 font-mono text-[9px] tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green disabled:cursor-default ${
+              className={`-mt-3 flex min-h-[34px] flex-col items-center gap-1 rounded px-1.5 py-1 font-mono text-[10px] tabular-nums transition disabled:cursor-default ${
                 i === activeStop
                   ? "text-accent-green"
                   : reached
                     ? "text-ink-mid hover:text-accent-green"
-                    : "text-ink-lo"
+                    : "text-ink-lo/45"
               }`}
             >
               <span

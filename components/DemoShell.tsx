@@ -28,8 +28,8 @@ export function DemoShell() {
   const persona = personaById(personaId);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-[1000px] flex-col lg:px-6 lg:py-6">
-      <div className="hidden items-center justify-between pb-4 lg:flex">
+    <div className="mx-auto flex min-h-dvh w-full max-w-[1000px] flex-col md:px-6 md:py-5">
+      <div className="hidden items-center justify-between pb-3 md:flex">
         <Link href="/" className="text-sm font-semibold tracking-tight text-ink-hi">
           HealthOS
         </Link>
@@ -38,11 +38,11 @@ export function DemoShell() {
         </span>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col items-stretch gap-4 lg:flex-row lg:justify-center">
+      <div className="flex min-h-0 flex-1 flex-col items-stretch gap-4 md:flex-row md:justify-center">
         <div
           className={`flex min-h-0 flex-1 flex-col ${
-            activeTab === "channel" ? "flex" : "hidden lg:flex"
-          } lg:flex-none`}
+            activeTab === "channel" ? "flex" : "hidden md:flex"
+          } md:flex-none`}
         >
           <PhoneFrame>
             {phase === "setup" ? (
@@ -94,10 +94,10 @@ export function DemoShell() {
 
         <div
           className={`min-h-0 flex-1 flex-col ${
-            activeTab === "engine" ? "flex" : "hidden lg:flex"
-          } lg:w-[420px] lg:flex-none`}
+            activeTab === "engine" ? "flex" : "hidden md:flex"
+          } md:w-[380px] md:flex-none lg:w-[420px]`}
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-base-700 bg-base-900/60 lg:h-[844px] lg:max-h-[86vh] lg:flex-none lg:rounded-3xl lg:border">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-base-700 bg-base-900/60 md:h-[min(844px,calc(100dvh-6.5rem))] md:flex-none md:rounded-3xl md:border">
             <EngineFeed
               sourced={sourced}
               highlightBeatId={highlightBeatId}
@@ -107,7 +107,7 @@ export function DemoShell() {
         </div>
       </div>
 
-      <div className="flex gap-1 border-t border-base-700 bg-base-900 p-1.5 lg:hidden">
+      <div className="flex gap-1 border-t border-base-700 bg-base-900 p-1.5 md:hidden">
         {(["channel", "engine"] as const).map((tab) => (
           <button
             key={tab}

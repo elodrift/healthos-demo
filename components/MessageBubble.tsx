@@ -30,14 +30,15 @@ export function MessageBubble({
     >
       <div className="mb-1 flex items-center gap-2 px-1">
         {!isUser ? (
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.18em] text-ink-lo">
+          <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-lo">
             HealthOS
           </span>
         ) : null}
-        <span className="font-mono text-[9px] tabular-nums text-ink-lo">{time}</span>
+        <span className="font-mono text-[10px] tabular-nums text-ink-lo">{time}</span>
       </div>
       <div
-        className={`max-w-[88%] rounded-2xl px-4 py-3 text-[15px] leading-relaxed ${
+        // ch cap keeps the measure readable when the phone frame is not in play
+        className={`max-w-[min(88%,60ch)] rounded-2xl px-4 py-3 text-[15px] leading-relaxed ${
           isUser
             ? "rounded-br-md border border-base-600 bg-base-700 text-ink-hi"
             : "rounded-bl-md border border-base-700 bg-base-850 text-ink-hi shadow-card"

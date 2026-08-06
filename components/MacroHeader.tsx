@@ -27,30 +27,29 @@ function Tile({
   const confirmedPct = Math.max(0, pct - estPct);
 
   return (
-    <div className="min-w-0 flex-1 rounded-xl border border-base-700 bg-base-850/80 px-3 py-2.5">
-      <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.16em] text-ink-lo">
+    <div className="min-w-0 flex-1 rounded-xl border border-base-700 bg-base-850/80 px-2.5 py-2">
+      <div className="flex items-center gap-1">
+        <span className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-lo">
           {label}
         </span>
         {revised ? (
           <motion.span
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
-            className="rounded-full bg-accent-green/15 px-1.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-accent-green"
+            className="shrink-0 rounded-full bg-accent-green/15 px-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-accent-green"
           >
             v2
           </motion.span>
         ) : null}
       </div>
-      <div className="mt-0.5 flex items-baseline gap-1">
-        <span className="text-[26px] font-semibold leading-none tabular-nums text-accent-green">
-          {Math.round(shownConsumed)}
-          {unit}
-        </span>
-        <span className="text-[12px] tabular-nums text-ink-mid">
-          / {Math.round(shownTarget)}
-          {unit}
-        </span>
+      {/* stacked, not inline: three tiles at 390px can't fit "620 / 2700" on one line */}
+      <div className="mt-1 text-[22px] font-semibold leading-none tabular-nums text-accent-green">
+        {Math.round(shownConsumed)}
+        {unit}
+      </div>
+      <div className="mt-0.5 font-mono text-[11px] tabular-nums text-ink-mid">
+        / {Math.round(shownTarget)}
+        {unit}
       </div>
       <div
         className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-base-700"
@@ -107,12 +106,17 @@ export function MacroHeader({
           <div className="truncate text-[13px] font-semibold text-ink-hi">HealthOS</div>
           <div className="truncate text-[11px] text-ink-mid">co-pilot for {name}</div>
         </div>
-        <span className="shrink-0 rounded-full border border-base-600 px-2 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-ink-mid">
+        <span className="shrink-0 rounded-full border border-base-600 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-ink-mid">
           {goalModeBadge[mode]}
         </span>
       </div>
 
-      <div className="mt-3 flex gap-2">
+      {/*
+       * Carbs earns a tile because carbs is what the 17:00 revision actually
+       * moves (320g -> 240g). Without it the header stays silent during the one
+       * moment the whole demo is built around.
+       */}
+      <div className="mt-3 flex gap-1.5">
         <Tile
           label="Protein"
           consumed={consumed.protein_g}
@@ -120,6 +124,14 @@ export function MacroHeader({
           target={targets.protein_g}
           unit="g"
           revised={false}
+        />
+        <Tile
+          label="Carbs"
+          consumed={consumed.carbs_g}
+          estimated={estimated.carbs_g}
+          target={targets.carbs_g}
+          unit="g"
+          revised={revised}
         />
         <Tile
           label="Kcal"
