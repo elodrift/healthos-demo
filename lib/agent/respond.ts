@@ -488,16 +488,28 @@ export function respond(intent: Intent, s: AgentSnapshot): Beat[] {
     }
 
     case "temptation": {
+      const kcalLeft = Math.round(s.remaining.kcal);
+      const fatLeft = Math.round(s.remaining.fat_g);
+      // Never assert there is room without checking. A cheerful "you have
+      // plenty left" on a day already spent is the exact false confidence this
+      // product exists to refuse.
+      const roomy = kcalLeft > 300;
+
       return [
         say("Willpower is not the variable I would try to fix.", t),
+        roomy
+          ? say(
+              `You have ${kcalLeft} kcal and ${fatLeft} g of fat headroom left, so the thing you are thinking about probably fits. Have it deliberately rather than at 11pm standing up.`,
+              t,
+            )
+          : say(
+              `Honestly, no — ${kcalLeft} kcal and ${fatLeft} g of fat left means it does not fit today without pushing you over. I am not going to pretend otherwise.`,
+              t,
+            ),
         say(
-          `You have ${Math.round(s.remaining.kcal)} kcal and ${Math.round(
-            s.remaining.fat_g ?? 0,
-          )} g of fat headroom left, which is genuinely enough room for the thing you are thinking about.`,
-          t,
-        ),
-        say(
-          "Eat it and tell me, and it costs you an honest line in the log. Eat it and hide it, and it costs me the ability to explain your numbers next week. That is the whole difference.",
+          roomy
+            ? "Eat it and tell me. An honest line in the log costs you nothing; a hidden one costs me the ability to explain your numbers next week."
+            : "If you eat it anyway, still tell me. I would much rather score the day you actually had than the day you wish you had.",
           t,
         ),
       ];
