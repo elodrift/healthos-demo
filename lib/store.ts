@@ -127,10 +127,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
     choose: (beatId, optionId) => {
       clear();
-      set((s) => ({
-        choices: { ...s.choices, [beatId]: optionId },
+      const nextChoices = { ...get().choices, [beatId]: optionId };
+      // Answering splices the chosen branch in after this beat. Re-derive the
+      // timeline and park revealCount just past the choice so the day resumes
+      // on the first beat of the branch instead of re-revealing the chips.
+      const timeline = buildTimeline({
+        setup: { personaId: get().personaId, mode: get().mode },
+        choices: nextChoices,
+      });
+      const idx = timeline.findIndex((b) => b.id === beatId);
+      set({
+        choices: nextChoices,
         highlightBeatId: null,
-      }));
+        revealCount: idx >= 0 ? idx + 1 : get().revealCount,
+      });
       schedule();
     },
 
