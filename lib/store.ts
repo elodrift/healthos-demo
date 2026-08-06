@@ -1,124 +1,180 @@
 "use client";
 
 import { create } from "zustand";
-import { beats } from "@/lib/fixtures/scenarios/boat-trip";
-import { buildTimeline } from "@/lib/scenario-engine";
-import type { ScenarioContext } from "@/lib/fixtures/scenarios/types";
+import { buildTimeline } from "./script-engine";
+import { defaultPersonaId, type GoalMode, type PersonaId } from "./fixtures/personas";
+import type { ScriptContext } from "./fixtures/script-types";
 
+export type Phase = "setup" | "day";
 export type Tab = "channel" | "engine";
 
-const HEALTHOS_TYPING_MS = 750;
-const CARD_STAGE_MS = 550;
-const USER_ECHO_MS = 150;
-const DIM_BEFORE_REVISION_MS = 260;
-
-function delayFor(beatKind: string, speaker?: string): number {
-  if (beatKind === "message") return speaker === "healthos" ? HEALTHOS_TYPING_MS : USER_ECHO_MS;
-  if (beatKind === "choice") return 0;
-  return CARD_STAGE_MS;
-}
+const TYPING_MS = 850;
+const USER_ECHO_MS = 240;
+const CARD_MS = 620;
+const DIM_MS = 750;
+const AUTO_CHOICE_MS = 14000;
 
 type PlayerState = {
-  ctx: ScenarioContext;
+  phase: Phase;
+  setupStep: number;
+  personaId: PersonaId;
+  mode: GoalMode;
+
+  choices: Record<string, string>;
   revealCount: number;
-  typingBeatId: string | null;
+  typing: boolean;
   dimming: boolean;
-  autoplay: boolean;
   activeTab: Tab;
-  highlightedBeatId: string | null;
-  started: boolean;
+  /** cross-highlight: the beat currently linked across chat <-> engine */
+  highlightBeatId: string | null;
   timer: ReturnType<typeof setTimeout> | null;
 
-  start: () => void;
+  ctx: () => ScriptContext;
+  setPersona: (id: PersonaId) => void;
+  setMode: (m: GoalMode) => void;
+  setSetupStep: (n: number) => void;
+  startDay: () => void;
   choose: (beatId: string, optionId: string) => void;
-  setAutoplay: (v: boolean) => void;
   setActiveTab: (t: Tab) => void;
   setHighlight: (id: string | null) => void;
-  scrubTo: (index: number) => void;
-  skipTyping: () => void;
+  scrubToIndex: (index: number) => void;
+  replayFromDisruption: () => void;
+  resetAll: () => void;
 };
 
-function clearTimer(get: () => PlayerState) {
-  const t = get().timer;
-  if (t) clearTimeout(t);
-}
-
 export const usePlayerStore = create<PlayerState>((set, get) => {
-  function scheduleNext() {
-    clearTimer(get);
-    const { ctx, revealCount, autoplay } = get();
-    if (!autoplay) return;
-    const timeline = buildTimeline(beats, ctx);
-    if (revealCount >= timeline.length) return;
-    const nextBeat = timeline[revealCount];
+  function clear() {
+    const t = get().timer;
+    if (t) clearTimeout(t);
+    set({ timer: null });
+  }
 
-    const runReveal = () => {
-      set((s) => ({ revealCount: s.revealCount + 1, typingBeatId: null, dimming: false, timer: null }));
-      scheduleNext();
+  function schedule() {
+    clear();
+    const state = get();
+    if (state.phase !== "day") return;
+    const timeline = buildTimeline(state.ctx());
+    if (state.revealCount >= timeline.length) return;
+
+    const next = timeline[state.revealCount];
+
+    const reveal = () => {
+      set((s) => ({ revealCount: s.revealCount + 1, typing: false, dimming: false, timer: null }));
+      schedule();
     };
 
-    if (nextBeat.kind === "message" && nextBeat.speaker === "healthos") {
-      set({ typingBeatId: nextBeat.id });
-    }
-
-    if (nextBeat.kind === "target-revision-card") {
-      set({ dimming: true });
-      const t1 = setTimeout(() => {
-        set({ dimming: false });
-        const t2 = setTimeout(runReveal, CARD_STAGE_MS);
-        set({ timer: t2 });
-      }, DIM_BEFORE_REVISION_MS);
-      set({ timer: t1 });
+    // A pending choice waits for the visitor, then auto-plays the first option.
+    if (next.kind === "choice") {
+      set({ typing: false, dimming: false });
+      const t = setTimeout(() => {
+        set((s) => ({ revealCount: s.revealCount + 1, timer: null }));
+        get().choose(next.id, next.options[0].id);
+      }, AUTO_CHOICE_MS);
+      set({ timer: t });
       return;
     }
 
-    const delay = delayFor(nextBeat.kind, nextBeat.kind === "message" ? nextBeat.speaker : undefined);
-    const t = setTimeout(runReveal, delay);
+    // THE CLIMAX: the stage dims before the revision card lands.
+    if (next.kind === "card" && next.card.type === "target-revision") {
+      set({ dimming: true, typing: false });
+      const t = setTimeout(reveal, DIM_MS);
+      set({ timer: t });
+      return;
+    }
+
+    if (next.kind === "message" && next.speaker === "healthos") {
+      set({ typing: true });
+      const t = setTimeout(reveal, TYPING_MS);
+      set({ timer: t });
+      return;
+    }
+
+    const delay =
+      next.kind === "message" ? USER_ECHO_MS : next.kind === "close" ? 400 : CARD_MS;
+    const t = setTimeout(reveal, delay);
     set({ timer: t });
   }
 
   return {
-    ctx: {},
+    phase: "setup",
+    setupStep: 0,
+    personaId: defaultPersonaId,
+    mode: "strict",
+
+    choices: {},
     revealCount: 0,
-    typingBeatId: null,
+    typing: false,
     dimming: false,
-    autoplay: true,
     activeTab: "channel",
-    highlightedBeatId: null,
-    started: false,
+    highlightBeatId: null,
     timer: null,
 
-    start: () => {
-      if (get().started) return;
-      set({ started: true });
-      scheduleNext();
+    ctx: () => ({
+      setup: { personaId: get().personaId, mode: get().mode },
+      choices: get().choices,
+    }),
+
+    setPersona: (id) => set({ personaId: id }),
+    setMode: (m) => set({ mode: m }),
+    setSetupStep: (n) => set({ setupStep: n }),
+
+    startDay: () => {
+      if (get().phase === "day") return;
+      set({ phase: "day", revealCount: 0, choices: {} });
+      schedule();
     },
 
     choose: (beatId, optionId) => {
-      set((s) => ({ ctx: { ...s.ctx, [beatId]: optionId } }));
-      scheduleNext();
-    },
-
-    setAutoplay: (v) => {
-      set({ autoplay: v });
-      if (v) scheduleNext();
-      else clearTimer(get);
+      clear();
+      set((s) => ({
+        choices: { ...s.choices, [beatId]: optionId },
+        highlightBeatId: null,
+      }));
+      schedule();
     },
 
     setActiveTab: (t) => set({ activeTab: t }),
-    setHighlight: (id) => set({ highlightedBeatId: id }),
+    setHighlight: (id) => set({ highlightBeatId: id }),
 
-    scrubTo: (index) => {
-      clearTimer(get);
-      set({ revealCount: Math.max(0, index), typingBeatId: null, dimming: false, autoplay: false });
+    scrubToIndex: (index) => {
+      clear();
+      set({ revealCount: Math.max(1, index), typing: false, dimming: false });
+      schedule();
     },
 
-    skipTyping: () => {
-      const { typingBeatId, dimming } = get();
-      if (!typingBeatId && !dimming) return;
-      clearTimer(get);
-      set((s) => ({ revealCount: s.revealCount + 1, typingBeatId: null, dimming: false, timer: null }));
-      scheduleNext();
+    replayFromDisruption: () => {
+      clear();
+      const { choices, personaId, mode } = get();
+      const next: Record<string, string> = { ...choices };
+      next["b4-fork"] = next["b4-fork"] === "skip-training" ? "restaurant" : "skip-training";
+      // drop everything decided inside the branch we are leaving
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith("b4a") || k.startsWith("b4b") || k.startsWith("b5")) delete next[k];
+      });
+      const timeline = buildTimeline({ setup: { personaId, mode }, choices: next });
+      const forkIdx = timeline.findIndex((b) => b.id === "b4-fork");
+      set({
+        choices: next,
+        activeTab: "channel",
+        revealCount: forkIdx + 1,
+        typing: false,
+        dimming: false,
+      });
+      schedule();
+    },
+
+    resetAll: () => {
+      clear();
+      set({
+        phase: "setup",
+        setupStep: 0,
+        choices: {},
+        revealCount: 0,
+        typing: false,
+        dimming: false,
+        activeTab: "channel",
+        highlightBeatId: null,
+      });
     },
   };
 });

@@ -6,32 +6,33 @@ const config: Config = {
     extend: {
       colors: {
         base: {
-          950: "#05070d",
-          900: "#0a0f1a",
-          850: "#0d1420",
-          800: "#111a2b",
-          700: "#182338",
-          600: "#22304a",
-          500: "#324567",
+          950: "#070B16",
+          900: "#0A0F1E",
+          850: "#0E1425",
+          800: "#131B2F",
+          700: "#1A2440",
+          600: "#243052",
+          500: "#33436C",
         },
         accent: {
-          green: "#34d399",
-          greendim: "#1f8f6c",
-          amber: "#f5a524",
-          red: "#f0554f",
-          blue: "#4f8ef7",
+          green: "#3DDC97",
+          greendim: "#1C8F66",
+          amber: "#F0B429",
+          red: "#E5484D",
         },
         ink: {
-          hi: "#f4f7fb",
-          mid: "#c3ccdb",
-          lo: "#8b96ab",
+          hi: "#F2F6FC",
+          mid: "#C7D1E2",
+          lo: "#98A5BC",
         },
       },
       fontFamily: {
-        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       boxShadow: {
-        card: "0 8px 30px -12px rgba(0,0,0,0.5)",
+        card: "0 10px 34px -14px rgba(0,0,0,0.65)",
+        glow: "0 0 0 1px rgba(61,220,151,0.35), 0 0 28px -8px rgba(61,220,151,0.4)",
       },
       keyframes: {
         blink: {

@@ -1,29 +1,30 @@
-// The only "engine" the demo is allowed to have (DEMO_SPEC.md §3). A pure
-// function: events in, UI state out. No planning/diagnosis logic ported from
-// the real Health Engine — the rules below are the reducer rules the spec
-// enumerates, nothing more.
+// The only "engine" the demo has. A pure function: events in, UI state out.
+// Rules (hard requirement from the brief):
+//  - current targets = latest TARGETS_REVISED else SESSION_OPENED
+//  - each FOOD_LOGGED is scored against the snapshot version it carries, forever
+//  - remaining floors at zero
+//  - diagnosis is one of on_track | over_by_choice | over_by_revision | uncertain,
+//    always carrying its cause
+// No other state logic anywhere in the app.
 
 import type {
   DemoEvent,
   Targets,
   Macros,
-  Confidence,
+  DaySummary,
+  DiagnosisCode,
   FoodLoggedEvent,
   TargetsRevisedEvent,
-  DaySummary,
 } from "./events";
-
-export type MealDiagnosis =
-  | "on_track"
-  | "over_by_choice"
-  | "over_by_revision"
-  | "uncertain";
 
 export type LoggedMeal = {
   event: FoodLoggedEvent;
+  /** index into the event array — used for cross-highlighting */
   index: number;
-  diagnosis: MealDiagnosis;
+  diagnosis: DiagnosisCode;
+  /** the frozen targets snapshot this meal was judged against */
   targetsAtLogTime: Targets;
+  targetsVersionAtLogTime: number;
 };
 
 export type DemoState = {
@@ -32,13 +33,26 @@ export type DemoState = {
   targetHistory: Targets[];
   consumed: Macros;
   remaining: Macros;
+  /** the part of `consumed` that came in below HIGH confidence — rendered hatched */
+  estimated: Macros;
   loggedMeals: LoggedMeal[];
   revisions: Array<{ event: TargetsRevisedEvent; index: number }>;
-  dayDiagnosis: MealDiagnosis;
+  plannedVariances: string[];
+  acceptedProposals: string[];
+  diagnosis: { code: DiagnosisCode; causeChain: string[] } | null;
   daySummary: DaySummary | null;
+  closed: boolean;
 };
 
 const ZERO_MACROS: Macros = { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 };
+
+const EMPTY_TARGETS: Targets = {
+  kcal: 0,
+  protein_g: 0,
+  carbs_g: 0,
+  fat_max_g: 0,
+  provenance: {},
+};
 
 function sumMacros(a: Macros, b: Macros): Macros {
   return {
@@ -62,92 +76,101 @@ function remainingOf(targets: Targets, consumed: Macros): Macros {
   };
 }
 
-/** A meal is judged only against the targets version live when it was
- *  eaten — never re-scored after a later revision. Low/medium confidence
- *  estimates are honest uncertainty, not a number to grade. */
+/** A meal is judged only against the targets version live when it was eaten —
+ *  never re-scored after a later revision. Estimates are honest uncertainty,
+ *  not a number to grade. */
 function diagnoseMeal(
-  cumulativeConsumedThroughMeal: Macros,
+  cumulativeThroughMeal: Macros,
   targetsAtLogTime: Targets,
-  confidence: Confidence,
-): MealDiagnosis {
-  if (confidence !== "HIGH") return "uncertain";
-  return cumulativeConsumedThroughMeal.kcal > targetsAtLogTime.kcal
+  event: FoodLoggedEvent,
+): DiagnosisCode {
+  if (event.confidence !== "HIGH") return "uncertain";
+  return cumulativeThroughMeal.kcal > targetsAtLogTime.kcal
     ? "over_by_choice"
     : "on_track";
-}
-
-function diagnoseDay(
-  loggedMeals: LoggedMeal[],
-  currentTargets: Targets,
-  consumed: Macros,
-  hadLoweringRevisionAfterOverage: boolean,
-): MealDiagnosis {
-  if (loggedMeals.some((m) => m.diagnosis === "uncertain")) return "uncertain";
-  if (consumed.kcal <= currentTargets.kcal) return "on_track";
-  return hadLoweringRevisionAfterOverage ? "over_by_revision" : "over_by_choice";
 }
 
 export function reduce(events: DemoEvent[]): DemoState {
   let targets: Targets | null = null;
   const targetHistory: Targets[] = [];
   let consumed: Macros = ZERO_MACROS;
+  let estimated: Macros = ZERO_MACROS;
   const loggedMeals: LoggedMeal[] = [];
   const revisions: Array<{ event: TargetsRevisedEvent; index: number }> = [];
+  const plannedVariances: string[] = [];
+  const acceptedProposals: string[] = [];
+  let diagnosis: DemoState["diagnosis"] = null;
   let daySummary: DaySummary | null = null;
-  let hadLoweringRevisionAfterOverage = false;
+  let closed = false;
 
   events.forEach((event, index) => {
     switch (event.t) {
       case "SESSION_OPENED": {
         targets = event.targets;
-        targetHistory.push(targets);
+        targetHistory.push(event.targets);
         break;
       }
       case "FOOD_LOGGED": {
         if (!targets) break; // no session yet — nothing to score against
         const targetsAtLogTime = targetHistory[event.snapshotVersion] ?? targets;
         consumed = sumMacros(consumed, event.macros);
-        const diagnosis = diagnoseMeal(consumed, targetsAtLogTime, event.confidence);
-        loggedMeals.push({ event, index, diagnosis, targetsAtLogTime });
+        if (event.confidence !== "HIGH") {
+          estimated = sumMacros(estimated, event.macros);
+        }
+        loggedMeals.push({
+          event,
+          index,
+          diagnosis: diagnoseMeal(consumed, targetsAtLogTime, event),
+          targetsAtLogTime,
+          targetsVersionAtLogTime: event.snapshotVersion,
+        });
         break;
       }
       case "TRAINING_CHANGED": {
-        break; // recorded via the TARGETS_REVISED it triggers; nothing to accumulate here
+        // recorded for the feed; its consequence arrives as TARGETS_REVISED
+        break;
       }
       case "TARGETS_REVISED": {
-        if (targets && event.targets.kcal < targets.kcal && consumed.kcal > event.targets.kcal) {
-          hadLoweringRevisionAfterOverage = true;
-        }
         targets = event.targets;
-        targetHistory.push(targets);
+        targetHistory.push(event.targets);
         revisions.push({ event, index });
+        break;
+      }
+      case "VARIANCE_PLANNED": {
+        plannedVariances.push(event.label);
+        break;
+      }
+      case "PROPOSAL_ACCEPTED": {
+        acceptedProposals.push(event.label);
+        break;
+      }
+      case "DIAGNOSIS": {
+        diagnosis = { code: event.code, causeChain: event.causeChain };
         break;
       }
       case "DAY_CLOSED": {
         daySummary = event.summary;
+        closed = true;
         break;
       }
     }
   });
 
-  const finalTargets: Targets =
-    targets ?? {
-      kcal: 0,
-      protein_g: 0,
-      carbs_g: 0,
-      fat_max_g: 0,
-      provenance: {},
-    };
+  const finalTargets: Targets = targets ?? EMPTY_TARGETS;
 
   return {
     targets: finalTargets,
-    targetsVersion: targetHistory.length - 1,
+    targetsVersion: Math.max(0, targetHistory.length - 1),
     targetHistory,
     consumed,
     remaining: remainingOf(finalTargets, consumed),
+    estimated,
     loggedMeals,
     revisions,
-    dayDiagnosis: diagnoseDay(loggedMeals, finalTargets, consumed, hadLoweringRevisionAfterOverage),
+    plannedVariances,
+    acceptedProposals,
+    diagnosis,
     daySummary,
+    closed,
   };
 }
