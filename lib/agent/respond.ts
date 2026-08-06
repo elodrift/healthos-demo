@@ -9,6 +9,7 @@
  */
 
 import type { DemoEvent, Macros, Targets } from "@/lib/events";
+import { dishMacros, type Dish } from "@/lib/fixtures/community";
 import type { MedicalRule } from "@/lib/fixtures/personas";
 import type { Beat, CardSpec } from "@/lib/fixtures/script-types";
 import type { Intent } from "./nlu";
@@ -56,6 +57,89 @@ const RULE_COPY: Record<string, { rule: string; body: string }> = {
     body: "You are at two this week already. This is a ceiling from your bloodwork, not a preference I am enforcing.",
   },
 };
+
+/**
+ * The reply to "I ate this too" from the community feed.
+ *
+ * The honest distinction this has to carry: for most dishes a big sample really
+ * does narrow the estimate, and saying so is the argument for the social layer.
+ * But for a dish whose variance lives in YOUR portion — hotpot, a steak cut —
+ * volume changes nothing, and claiming otherwise would be the same false
+ * precision this whole product refuses. So the two cases read differently.
+ */
+export function feedLogBeats(dish: Dish, s: AgentSnapshot): Beat[] {
+  const t = s.time;
+
+  const event: DemoEvent = {
+    t: "FOOD_LOGGED",
+    slot: "unplanned",
+    label: dish.name,
+    macros: dishMacros(dish),
+    confidence: dish.confidence,
+    // Scored against the version live right now, exactly like any other log.
+    snapshotVersion: s.targetsVersion,
+    cause: `logged from community · ${dish.logCount} logs of this dish`,
+  };
+
+  const beats: Beat[] = [
+    show(
+      {
+        type: "estimate",
+        label: dish.name,
+        confidence: dish.confidence,
+        kcalRange: dish.kcalRange,
+        proteinRange: dish.proteinRange,
+        note: dish.varianceNote,
+      },
+      t,
+      [event],
+    ),
+  ];
+
+  if (dish.reducibility === "reducible" && dish.confidence !== dish.soloConfidence) {
+    beats.push(
+      say(
+        `Logged at the community median. ${dish.logCount} people logging this is why I can give you ${dish.confidence} confidence instead of the ${dish.soloConfidence} you would have got on your own.`,
+        t,
+      ),
+    );
+  } else if (dish.reducibility === "irreducible") {
+    beats.push(
+      say(
+        `Logged, but I want to be straight with you: ${dish.logCount} other logs do not make this number better. The variance here is how much you personally ate, and no sample size can see your table.`,
+        t,
+      ),
+    );
+  } else {
+    beats.push(
+      say(
+        `Logged at the community median across ${dish.logCount} logs. This dish was already tight, so the sample confirms rather than narrows.`,
+        t,
+      ),
+    );
+  }
+
+  const tripped = dish.trips;
+  if (tripped && RULE_COPY[tripped]) {
+    beats.push(
+      show(
+        {
+          type: "never-suspends",
+          tag: "NEVER SUSPENDS",
+          rules: [RULE_COPY[tripped].rule],
+          body: RULE_COPY[tripped].body,
+        },
+        t,
+      ),
+      say(
+        "Popular in the feed does not mean cleared for you. That rule came off your bloodwork and it does not care what anyone else is eating.",
+        t,
+      ),
+    );
+  }
+
+  return beats;
+}
 
 export function respond(intent: Intent, s: AgentSnapshot): Beat[] {
   const t = s.time;

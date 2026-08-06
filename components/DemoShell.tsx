@@ -8,6 +8,8 @@ import { dayClock } from "@/lib/fixtures/day-script";
 import { MacroHeader } from "./MacroHeader";
 import { PhoneFrame } from "./PhoneFrame";
 import { ChatStream } from "./ChatStream";
+import { CommunityFeed } from "./CommunityFeed";
+import { PhoneNav } from "./PhoneNav";
 import { EngineFeed } from "./EngineFeed";
 import { TimelineScrubber } from "./TimelineScrubber";
 import { QuickSetup } from "./QuickSetup";
@@ -17,6 +19,7 @@ export function DemoShell() {
   const { sourced, demoState, currentTime, clockIndex, isDone } = useDemoState();
   const phase = usePlayerStore((s) => s.phase);
   const activeTab = usePlayerStore((s) => s.activeTab);
+  const phoneScreen = usePlayerStore((s) => s.phoneScreen);
   const setActiveTab = usePlayerStore((s) => s.setActiveTab);
   const highlightBeatId = usePlayerStore((s) => s.highlightBeatId);
   const setHighlight = usePlayerStore((s) => s.setHighlight);
@@ -63,14 +66,20 @@ export function DemoShell() {
                   mode={mode}
                   revised={demoState.revisions.length > 0}
                 />
-                <TimelineScrubber
-                  stops={dayClock}
-                  clockIndex={clockIndex}
-                  currentTime={currentTime}
-                  onScrub={scrubToIndex}
-                />
-                <ChatStream />
-                {isDone ? (
+                {/* The scrubber belongs to the scripted day, not the feed. The
+                    macro header stays on both, because watching it move after a
+                    feed log is the whole reason the feed exists. */}
+                {phoneScreen === "today" ? (
+                  <TimelineScrubber
+                    stops={dayClock}
+                    clockIndex={clockIndex}
+                    currentTime={currentTime}
+                    onScrub={scrubToIndex}
+                  />
+                ) : null}
+                {phoneScreen === "community" ? <CommunityFeed /> : <ChatStream />}
+                <PhoneNav />
+                {isDone && phoneScreen === "today" ? (
                   <div className="flex flex-col gap-2 border-t border-base-700 bg-base-900 px-3 py-3">
                     <Link
                       href="/results"

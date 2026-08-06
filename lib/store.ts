@@ -12,10 +12,14 @@ import {
 import type { Beat, ScriptContext } from "./fixtures/script-types";
 import { dayClock } from "./fixtures/day-script";
 import { classify, HANDOFF_THRESHOLD } from "./agent/nlu";
-import { respond, userBeat, type AgentSnapshot } from "./agent/respond";
+import { feedLogBeats, respond, userBeat, type AgentSnapshot } from "./agent/respond";
+import { dishById } from "./fixtures/community";
 
 export type Phase = "setup" | "day";
-export type Tab = "channel" | "engine" | "feed";
+export type Tab = "channel" | "engine";
+/** Surfaces inside the phone itself. The community feed is a screen in the
+ *  product, not a third pane of the demo. */
+export type PhoneScreen = "today" | "community";
 
 const TYPING_MS = 850;
 const USER_ECHO_MS = 240;
@@ -36,6 +40,9 @@ type PlayerState = {
   typing: boolean;
   dimming: boolean;
   activeTab: Tab;
+  phoneScreen: PhoneScreen;
+  /** dishes logged from the feed this session, so the UI can show the effect */
+  feedLogged: string[];
   /** cross-highlight: the beat currently linked across chat <-> engine */
   highlightBeatId: string | null;
   timer: ReturnType<typeof setTimeout> | null;
@@ -60,6 +67,9 @@ type PlayerState = {
   startDay: () => void;
   choose: (beatId: string, optionId: string) => void;
   setActiveTab: (t: Tab) => void;
+  setPhoneScreen: (s: PhoneScreen) => void;
+  /** "I ate this too" — logs the community median as a real event */
+  logFromFeed: (dishId: string) => Promise<void>;
   setHighlight: (id: string | null) => void;
   sendMessage: (text: string) => Promise<void>;
   resume: () => void;
@@ -182,6 +192,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     typing: false,
     dimming: false,
     activeTab: "channel",
+    phoneScreen: "today",
+    feedLogged: [],
     highlightBeatId: null,
     timer: null,
 
@@ -227,6 +239,38 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     },
 
     setActiveTab: (t) => set({ activeTab: t }),
+    setPhoneScreen: (screen) => set({ phoneScreen: screen }),
+
+    /**
+     * Tapping "I ate this too" is a real log, not a like. It emits a
+     * FOOD_LOGGED event carrying the community median and — crucially — the
+     * community's range, so the macro header moves and the engine feed shows
+     * where the number came from.
+     *
+     * The cause string names the sample size, because "412 logs" is the actual
+     * reason this estimate is tighter than a solo guess would have been.
+     */
+    logFromFeed: async (dishId) => {
+      if (get().thinking) return;
+      const dish = dishById(dishId);
+
+      clear();
+      const s = snapshot();
+      const t = s.time;
+
+      set((st) => ({
+        paused: true,
+        phoneScreen: "today",
+        activeTab: "channel",
+        feedLogged: st.feedLogged.includes(dishId) ? st.feedLogged : [...st.feedLogged, dishId],
+        liveBeats: [...st.liveBeats, userBeat(`I ate this too — ${dish.name.toLowerCase()}`, t)],
+        highlightBeatId: null,
+        lastReplySource: "matcher",
+      }));
+
+      await drip(feedLogBeats(dish, s));
+    },
+
     setHighlight: (id) => set({ highlightBeatId: id }),
 
     sendMessage: async (raw) => {
