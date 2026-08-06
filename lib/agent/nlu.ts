@@ -22,6 +22,16 @@ export type IntentKind =
   | "eating_out"
   | "alcohol"
   | "share"
+  // The realistic long tail. These were falling through to the model, which
+  // answered them with exactly the register this product is arguing against
+  // ("maintain your calorie and protein goals"). They have consequences for
+  // trust even when they have none for the numbers, so they are written here.
+  | "low_motivation"
+  | "temptation"
+  | "schedule_change"
+  | "diet_trend"
+  | "illness"
+  | "weight_stalled"
   | "greeting"
   | "thanks"
   | "unknown";
@@ -415,6 +425,156 @@ export function classify(raw: string): Intent {
 
   const share = any(text, ["share", "post this", "story", "instagram", "insta", "ig ", "feed"]);
   if (share) return { kind: "share", score: 0.9, matched: share };
+
+  /* ---- The long tail, checked before food logging: "craving pad thai" is
+   * not a meal to log, and "I feel pointless" must never be answered with a
+   * macro reminder. ---- */
+
+  const lowMotivation = any(text, [
+    "pointless",
+    "what's the point",
+    "whats the point",
+    "give up",
+    "giving up",
+    "can't be bothered",
+    "cant be bothered",
+    "no motivation",
+    "unmotivated",
+    "depressed",
+    "exhausted",
+    "burnt out",
+    "burned out",
+    "hate my body",
+    "hate this",
+    "failing",
+    "i failed",
+    "not working",
+    "waste of time",
+    "breakup",
+    "broke up",
+    "divorce",
+    "stressed",
+    "overwhelmed",
+    "anxious",
+    "sad",
+    "lonely",
+  ]);
+  if (lowMotivation) return { kind: "low_motivation", score: 0.9, matched: lowMotivation };
+
+  const temptation = any(text, [
+    "craving",
+    "crave",
+    "no willpower",
+    "willpower",
+    "tempted",
+    "temptation",
+    "keeps buying",
+    "keep buying",
+    "junk food",
+    "biscuits",
+    "cookies",
+    "chocolate",
+    "sweets",
+    "candy",
+    "crisps",
+    "chips in the house",
+    "snacking",
+    "can't stop eating",
+    "cant stop eating",
+    "binge",
+    "cheat meal",
+    "cheat day",
+  ]);
+  if (temptation) return { kind: "temptation", score: 0.85, matched: temptation };
+
+  const schedule = any(text, [
+    "night shift",
+    "nights",
+    "graveyard",
+    "shift work",
+    "work nights",
+    "new job",
+    "travelling",
+    "traveling",
+    "flying",
+    "flight",
+    "jet lag",
+    "jetlag",
+    "time zone",
+    "timezone",
+    "different hours",
+    "schedule changed",
+    "ramadan",
+    "fasting for religious",
+  ]);
+  if (schedule) return { kind: "schedule_change", score: 0.85, matched: schedule };
+
+  const trend = any(text, [
+    "fasting",
+    "intermittent",
+    "keto",
+    "ketogenic",
+    "carnivore",
+    "paleo",
+    "cleanse",
+    "detox",
+    "juice diet",
+    "low carb",
+    "carb cycling",
+    "vegan",
+    "vegetarian",
+    "atkins",
+    "whole30",
+    "weight loss pill",
+    "ozempic",
+    "supplement",
+    "creatine",
+    "fat burner",
+  ]);
+  if (trend) return { kind: "diet_trend", score: 0.85, matched: trend };
+
+  const ill = any(text, [
+    "sick",
+    "ill ",
+    "flu",
+    "fever",
+    "cold",
+    "covid",
+    "food poisoning",
+    "vomit",
+    "throwing up",
+    "no appetite",
+    "can't eat",
+    "cant eat",
+    "migraine",
+    "injured",
+    "injury",
+    "hurt my",
+  ]);
+  if (ill) return { kind: "illness", score: 0.85, matched: ill };
+
+  const stalled = any(text, [
+    "not losing",
+    "stopped losing",
+    "plateau",
+    "stalled",
+    "scale hasn't",
+    "scale hasnt",
+    "gained weight",
+    "putting on weight",
+    "weight went up",
+    "no progress",
+    "stuck at",
+    "same weight",
+    "hasn't moved",
+    "hasnt moved",
+    "haven't lost",
+    "havent lost",
+    "not shifting",
+    "nothing's changed",
+    "nothings changed",
+  ]);
+  if (stalled) return { kind: "weight_stalled", score: 0.9, matched: stalled };
 
   // ---- Food logging. Either we recognised the dish, or they clearly told us
   // they ate something we don't know — both are logs, the second is just LOW.

@@ -383,6 +383,112 @@ export function respond(intent: Intent, s: AgentSnapshot): Beat[] {
       ];
     }
 
+    /* ----------------------------------------------------------------
+     * The long tail. None of these move a number, so none of them emit an
+     * event — but all of them decide whether the person keeps trusting the
+     * thing. The rule for every one: engage with what they actually said,
+     * never answer with a macro reminder they can already see.
+     * ---------------------------------------------------------------- */
+    case "low_motivation": {
+      return [
+        say("That is worth taking seriously rather than talking you out of.", t),
+        say(
+          "I am not going to tell you to push through, and I am not going to pretend a protein target matters much today.",
+          t,
+        ),
+        say(
+          "The only thing I would ask: keep telling me what you eat, even roughly, even badly. A wide estimate I know about is worth more than a clean day I made up — and it means you are not starting from zero when this lifts.",
+          t,
+        ),
+      ];
+    }
+
+    case "temptation": {
+      return [
+        say("Willpower is not the variable I would try to fix.", t),
+        say(
+          `You have ${Math.round(s.remaining.kcal)} kcal and ${Math.round(
+            s.remaining.fat_g ?? 0,
+          )} g of fat headroom left, which is genuinely enough room for the thing you are thinking about.`,
+          t,
+        ),
+        say(
+          "Eat it and tell me, and it costs you an honest line in the log. Eat it and hide it, and it costs me the ability to explain your numbers next week. That is the whole difference.",
+          t,
+        ),
+      ];
+    }
+
+    case "schedule_change": {
+      return [
+        say("That changes the shape of the day, not the targets.", t),
+        say(
+          `Protein stays at ${s.targets.protein_g} g and the fat ceiling stays at ${s.targets.fat_max_g} g — both came from your bloodwork, and a clock does not move either one.`,
+          t,
+        ),
+        say(
+          "Meal timing is yours to arrange. Tell me when your training actually lands under the new schedule and I will move the carbohydrate to sit around it.",
+          t,
+        ),
+      ];
+    }
+
+    case "diet_trend": {
+      return [
+        say("I will give you the honest version rather than the encouraging one.", t),
+        show(
+          {
+            type: "never-suspends",
+            tag: "WHAT DOES NOT BEND",
+            rules: s.medicalRules.map((r) => r.label),
+            body: "Any regime you pick has to clear these first. They came from your bloodwork and your prescription, so they hold inside any diet you want to try.",
+          },
+          t,
+        ),
+        say(
+          `Past that, most of it comes down to whether you can hold ${s.targets.protein_g} g of protein and stay under ${s.targets.fat_max_g} g of fat while doing it. If a plan makes that harder, it is working against the two numbers that are actually medical.`,
+          t,
+        ),
+        say("If you want to try it, tell me and I will score the day against it honestly rather than argue.", t),
+      ];
+    }
+
+    case "illness": {
+      return [
+        say("Then today is not a day I am going to hold you to a target.", t),
+        say(
+          `Protein is a floor for recovery, not a score to chase — ${s.targets.protein_g} g is what I would still aim at if you can eat at all. If you cannot, that is information, not a failure.`,
+          t,
+        ),
+        say(
+          "Tell me what you manage and I will log it. When you are back, I will revise the week rather than pretending these days did not happen.",
+          t,
+        ),
+      ];
+    }
+
+    case "weight_stalled": {
+      return [
+        say("Before I change anything, I want to be honest about what I can and cannot see.", t),
+        say(
+          `Every low-confidence estimate in your log is a place the real number could be higher than what I recorded. ${
+            s.loggedLabels.length
+              ? `Today alone: ${s.loggedLabels.slice(0, 3).join(", ")}.`
+              : "You have not logged much today, which widens it further."
+          }`,
+          t,
+        ),
+        say(
+          "So the first answer is not 'eat less'. It is that a plateau against uncertain intake is not evidence of a broken metabolism — it is usually evidence that the intake is higher than the log says.",
+          t,
+        ),
+        say(
+          "Log a few days tightly, then I will have something worth revising the targets against. I would rather change them on evidence than on a guess.",
+          t,
+        ),
+      ];
+    }
+
     /* ---------------------------------------------------------------- */
     case "greeting":
       return [
