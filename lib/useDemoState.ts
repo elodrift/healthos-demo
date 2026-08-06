@@ -12,6 +12,7 @@ export function useDemoState() {
   const mode = usePlayerStore((s) => s.mode);
   const choices = usePlayerStore((s) => s.choices);
   const revealCount = usePlayerStore((s) => s.revealCount);
+  const liveBeats = usePlayerStore((s) => s.liveBeats);
 
   const ctx = useMemo(
     () => ({ setup: { personaId, mode }, choices }),
@@ -19,7 +20,14 @@ export function useDemoState() {
   );
 
   const timeline = useMemo(() => buildTimeline(ctx), [ctx]);
-  const revealedBeats = useMemo(() => timeline.slice(0, revealCount), [timeline, revealCount]);
+  const scripted = useMemo(() => timeline.slice(0, revealCount), [timeline, revealCount]);
+
+  // Free-typed turns are appended, not spliced: the scripted day is paused
+  // while someone types, so "after everything revealed so far" is also
+  // chronologically correct. Their events run through the same reducer, which
+  // is why a typed meal moves the header and shows up in the engine panel.
+  const revealedBeats = useMemo(() => [...scripted, ...liveBeats], [scripted, liveBeats]);
+
   const { events, sourced } = useMemo(
     () => buildEventLog(ctx, revealedBeats),
     [ctx, revealedBeats],
@@ -27,8 +35,15 @@ export function useDemoState() {
   const demoState = useMemo(() => reduce(events), [events]);
 
   const last = revealedBeats[revealedBeats.length - 1];
+
+  // A pending choice is a property of the scripted timeline, so it must be read
+  // from the last *scripted* beat — otherwise typing while the chips are up
+  // would hide them and strand the day with no way to advance.
+  const lastScripted = scripted[scripted.length - 1];
   const pendingChoice: ChoiceBeat | null =
-    last && last.kind === "choice" && !choices[last.id] ? last : null;
+    lastScripted && lastScripted.kind === "choice" && !choices[lastScripted.id]
+      ? lastScripted
+      : null;
 
   const isDone = revealCount >= timeline.length && !pendingChoice;
 

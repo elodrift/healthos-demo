@@ -1,18 +1,29 @@
 "use client";
 
 import { create } from "zustand";
-import { buildTimeline } from "./script-engine";
-import { defaultPersonaId, type GoalMode, type PersonaId } from "./fixtures/personas";
-import type { ScriptContext } from "./fixtures/script-types";
+import { buildEventLog, buildTimeline } from "./script-engine";
+import { reduce } from "./reducer";
+import {
+  defaultPersonaId,
+  personaById,
+  type GoalMode,
+  type PersonaId,
+} from "./fixtures/personas";
+import type { Beat, ScriptContext } from "./fixtures/script-types";
+import { dayClock } from "./fixtures/day-script";
+import { classify, HANDOFF_THRESHOLD } from "./agent/nlu";
+import { respond, userBeat, type AgentSnapshot } from "./agent/respond";
 
 export type Phase = "setup" | "day";
-export type Tab = "channel" | "engine";
+export type Tab = "channel" | "engine" | "feed";
 
 const TYPING_MS = 850;
 const USER_ECHO_MS = 240;
 const CARD_MS = 620;
 const DIM_MS = 750;
 const AUTO_CHOICE_MS = 14000;
+/** gap between successive agent beats in a free-typed reply */
+const LIVE_BEAT_MS = 620;
 
 type PlayerState = {
   phase: Phase;
@@ -29,6 +40,19 @@ type PlayerState = {
   highlightBeatId: string | null;
   timer: ReturnType<typeof setTimeout> | null;
 
+  /**
+   * Free-typed turns and the agent's answers, appended after the scripted
+   * timeline. These carry real DemoEvents, so a typed meal moves the macro
+   * header and lands in the engine feed exactly like a scripted one.
+   */
+  liveBeats: Beat[];
+  /** the scripted day holds still while someone is having their own conversation */
+  paused: boolean;
+  /** true while the fallback model is being consulted */
+  thinking: boolean;
+  /** set when the last reply came from the model rather than the matcher */
+  lastReplySource: "matcher" | "model" | "guardrail" | null;
+
   ctx: () => ScriptContext;
   setPersona: (id: PersonaId) => void;
   setMode: (m: GoalMode) => void;
@@ -37,6 +61,8 @@ type PlayerState = {
   choose: (beatId: string, optionId: string) => void;
   setActiveTab: (t: Tab) => void;
   setHighlight: (id: string | null) => void;
+  sendMessage: (text: string) => Promise<void>;
+  resume: () => void;
   scrubToIndex: (index: number) => void;
   replayFromDisruption: () => void;
   resetAll: () => void;
@@ -52,7 +78,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
   function schedule() {
     clear();
     const state = get();
-    if (state.phase !== "day") return;
+    if (state.phase !== "day" || state.paused) return;
     const timeline = buildTimeline(state.ctx());
     if (state.revealCount >= timeline.length) return;
 
@@ -96,6 +122,55 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     set({ timer: t });
   }
 
+  /**
+   * The state the agent reasons against — derived the same way the UI derives
+   * it, by replaying the event log through the reducer. The agent has no
+   * private copy of the truth.
+   */
+  function snapshot(): AgentSnapshot {
+    const s = get();
+    const ctx = s.ctx();
+    const timeline = buildTimeline(ctx);
+    const revealed = timeline.slice(0, s.revealCount);
+    const all = [...revealed, ...s.liveBeats];
+    const { events } = buildEventLog(ctx, all);
+    const state = reduce(events);
+    const persona = personaById(s.personaId);
+    const last = all[all.length - 1];
+
+    return {
+      time: last?.time ?? dayClock[0],
+      name: persona.displayName,
+      targets: state.targets,
+      targetsVersion: state.targetsVersion,
+      consumed: state.consumed,
+      remaining: state.remaining,
+      medicalRules: persona.medicalNeverSuspends,
+      alreadyRevised: state.revisions.length > 0,
+      loggedLabels: state.loggedMeals.map((m) => m.event.label),
+    };
+  }
+
+  /** Reveal an agent reply beat by beat, with a typing pause before each line. */
+  function drip(beats: Beat[]): Promise<void> {
+    return new Promise((resolve) => {
+      const step = (i: number) => {
+        if (i >= beats.length) {
+          set({ typing: false });
+          resolve();
+          return;
+        }
+        const beat = beats[i];
+        set({ typing: beat.kind === "message" });
+        setTimeout(() => {
+          set((s) => ({ liveBeats: [...s.liveBeats, beat], typing: false }));
+          setTimeout(() => step(i + 1), 120);
+        }, LIVE_BEAT_MS);
+      };
+      step(0);
+    });
+  }
+
   return {
     phase: "setup",
     setupStep: 0,
@@ -110,6 +185,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     highlightBeatId: null,
     timer: null,
 
+    liveBeats: [],
+    paused: false,
+    thinking: false,
+    lastReplySource: null,
+
     ctx: () => ({
       setup: { personaId: get().personaId, mode: get().mode },
       choices: get().choices,
@@ -121,7 +201,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
     startDay: () => {
       if (get().phase === "day") return;
-      set({ phase: "day", revealCount: 0, choices: {} });
+      set({ phase: "day", revealCount: 0, choices: {}, liveBeats: [], paused: false });
       schedule();
     },
 
@@ -139,6 +219,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       set({
         choices: nextChoices,
         highlightBeatId: null,
+        // Answering a chip is an explicit "carry on" — it lifts a typing pause.
+        paused: false,
         revealCount: idx >= 0 ? idx + 1 : get().revealCount,
       });
       schedule();
@@ -147,9 +229,109 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     setActiveTab: (t) => set({ activeTab: t }),
     setHighlight: (id) => set({ highlightBeatId: id }),
 
+    sendMessage: async (raw) => {
+      const text = raw.trim();
+      if (!text || get().thinking) return;
+
+      // The scripted day stops dead. Nothing is more disorienting than the
+      // narrative talking over you while you are mid-conversation.
+      clear();
+      const at = snapshot().time;
+      set((s) => ({
+        paused: true,
+        liveBeats: [...s.liveBeats, userBeat(text, at)],
+        highlightBeatId: null,
+      }));
+
+      const intent = classify(text);
+
+      if (intent.score >= HANDOFF_THRESHOLD) {
+        set({ lastReplySource: "matcher" });
+        await drip(respond(intent, snapshot()));
+        return;
+      }
+
+      // Below the threshold this is genuinely open-ended, so the model gets a
+      // turn. It never gets to touch a target or a rule.
+      set({ typing: true, thinking: true });
+      try {
+        const s = snapshot();
+        const res = await fetch("/api/agent", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            message: text,
+            state: {
+              time: s.time,
+              name: s.name,
+              mode: get().mode,
+              targets: {
+                kcal: s.targets.kcal,
+                protein_g: s.targets.protein_g,
+                carbs_g: s.targets.carbs_g,
+                fat_max_g: s.targets.fat_max_g,
+              },
+              consumedKcal: Math.round(s.consumed.kcal),
+              remainingKcal: Math.round(s.remaining.kcal),
+              remainingProtein: Math.round(s.remaining.protein_g),
+              medicalRules: s.medicalRules.map((r) => r.label),
+              revised: s.alreadyRevised,
+              logged: s.loggedLabels,
+            },
+            transcript: get()
+              .liveBeats.filter((b) => b.kind === "message")
+              .slice(-8)
+              .map((b) => ({
+                role: b.kind === "message" && b.speaker === "user" ? "user" : "agent",
+                text: b.kind === "message" ? b.text : "",
+              })),
+          }),
+        });
+
+        const data: { lines?: string[]; touchesMedical?: boolean } = await res.json();
+        set({ typing: false, thinking: false });
+
+        // THE GUARDRAIL. If the model thinks the honest answer requires ruling
+        // on safety, its text is discarded unread and the deterministic branch
+        // answers instead. A model never gets the last word on a medical rule.
+        if (data.touchesMedical) {
+          set({ lastReplySource: "guardrail" });
+          await drip(respond({ ...classify(text), kind: "medical_check", score: 1 }, snapshot()));
+          return;
+        }
+
+        set({ lastReplySource: "model" });
+        await drip(
+          (data.lines ?? []).map((line) => ({
+            kind: "message" as const,
+            speaker: "healthos" as const,
+            text: line,
+            time: s.time,
+            id: `live-model-${Math.random().toString(36).slice(2, 9)}`,
+          })),
+        );
+      } catch {
+        set({ typing: false, thinking: false, lastReplySource: "matcher" });
+        await drip(respond({ kind: "greeting", score: 1 }, snapshot()));
+      }
+    },
+
+    resume: () => {
+      set({ paused: false, typing: false });
+      schedule();
+    },
+
     scrubToIndex: (index) => {
       clear();
-      set({ revealCount: Math.max(1, index), typing: false, dimming: false });
+      // Jumping the clock invalidates anything typed at the old time.
+      set({
+        revealCount: Math.max(1, index),
+        typing: false,
+        dimming: false,
+        liveBeats: [],
+        paused: false,
+        lastReplySource: null,
+      });
       schedule();
     },
 
@@ -170,6 +352,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         revealCount: forkIdx + 1,
         typing: false,
         dimming: false,
+        liveBeats: [],
+        paused: false,
+        lastReplySource: null,
       });
       schedule();
     },
@@ -185,6 +370,10 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         dimming: false,
         activeTab: "channel",
         highlightBeatId: null,
+        liveBeats: [],
+        paused: false,
+        thinking: false,
+        lastReplySource: null,
       });
     },
   };
