@@ -288,7 +288,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
           }),
         });
 
-        const data: { lines?: string[]; touchesMedical?: boolean } = await res.json();
+        const data: {
+          lines?: string[];
+          touchesMedical?: boolean;
+          source?: "model" | "degraded";
+        } = await res.json();
         set({ typing: false, thinking: false });
 
         // THE GUARDRAIL. If the model thinks the honest answer requires ruling
@@ -300,7 +304,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
           return;
         }
 
-        set({ lastReplySource: "model" });
+        // A degraded reply is not a model reply — do not badge it as one.
+        set({ lastReplySource: data.source === "degraded" ? "guardrail" : "model" });
         await drip(
           (data.lines ?? []).map((line) => ({
             kind: "message" as const,
@@ -311,8 +316,26 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
           })),
         );
       } catch {
-        set({ typing: false, thinking: false, lastReplySource: "matcher" });
-        await drip(respond({ kind: "greeting", score: 1 }, snapshot()));
+        // The request itself never landed — offline, or the route is down. Say
+        // that, rather than pretending not to have understood.
+        const s = snapshot();
+        set({ typing: false, thinking: false, lastReplySource: "guardrail" });
+        await drip([
+          {
+            kind: "message",
+            speaker: "healthos",
+            text: "I understood you, but I cannot reach the model I use for open questions.",
+            time: s.time,
+            id: `live-offline-a-${Math.random().toString(36).slice(2, 9)}`,
+          },
+          {
+            kind: "message",
+            speaker: "healthos",
+            text: "Tell me what you ate, what changed about your training, or ask why one of your numbers is what it is — I handle those locally.",
+            time: s.time,
+            id: `live-offline-b-${Math.random().toString(36).slice(2, 9)}`,
+          },
+        ]);
       }
     },
 

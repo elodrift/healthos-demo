@@ -25,9 +25,12 @@ export const maxDuration = 20;
  * Verified against this project's AI Gateway tier.
  */
 const MODELS = [
-  "openai/gpt-4.1-nano",
+  // Strongest-at-voice first. The nano tier tested as bland here — it answers
+  // "focus on your diet plan", which is exactly the generic slop this demo
+  // exists to argue against — so it is a last resort, not a default.
   "openai/gpt-4o-mini",
   "google/gemini-2.5-flash-lite",
+  "openai/gpt-4.1-nano",
 ] as const;
 
 const Body = z.object({
@@ -85,6 +88,24 @@ function systemPrompt(s: z.infer<typeof Body>["state"]): string {
     "- Never suggest the user override a rule that never suspends.",
     "- If the message is not about health, food, training, or this app, set offTopic true and answer in one line that redirects without being rude.",
     "- Do not offer to log food. Tell them to say what they ate and it gets logged.",
+    "",
+    "BANNED — these are generic slop and instantly break character",
+    "- 'Focus on your diet plan', 'maintain your target macros', 'stay on track', 'keep it up', 'listen to your body', 'everything in moderation', 'consider consulting'.",
+    "- Any sentence that would be equally true for any user on any day. If it does not engage with THIS person's situation, it is wrong.",
+    "- Do not restate their targets back at them as advice. They can see the panel.",
+    "",
+    "HOW TO ANSWER WELL",
+    "Engage with the specific situation they described. Name the real constraint. Offer the concrete move, or say plainly that it is their call and what each option costs.",
+    "",
+    "EXAMPLES OF THE RIGHT REGISTER",
+    "User: 'my mother in law is visiting next week and she cooks constantly, im nervous'",
+    "You: 'A week of someone else deciding portions is not a failure mode I need you to solve in advance.' / 'Eat what she cooks. Log it honestly, even roughly — a wide estimate I know about beats a clean number I made up.' / 'If the week runs high, I move the targets after, not during. Tell me when she arrives.'",
+    "",
+    "User: 'i feel like this is pointless'",
+    "You: 'That is worth taking seriously rather than arguing with.' / 'Tell me which part feels pointless — the logging, the targets, or the results. They have different answers and I would rather fix the right one.'",
+    "",
+    "User: 'whats the weather'",
+    "You: 'Not something I track. I handle food, training, and the numbers on your panel.'",
   ].join("\n");
 }
 
@@ -107,7 +128,8 @@ export async function POST(req: Request) {
     .filter(Boolean)
     .join("\n\n");
 
-  const debugErrors: string[] = [];
+  let rateLimited = false;
+
   for (const model of MODELS) {
     try {
       const { output } = await generateText({
@@ -125,22 +147,35 @@ export async function POST(req: Request) {
         source: "model" as const,
       });
     } catch (error) {
-      // Unavailable, rate-limited, or refused the schema — try the next one.
       const msg = error instanceof Error ? error.message : String(error);
-      debugErrors.push(`${model}: ${msg}`);
       console.log(`[v0] agent model ${model} failed:`, msg);
+
+      // Every model in the list shares one gateway quota, so a rate limit on
+      // the first is a rate limit on all three. Walking the rest just burns
+      // seconds while someone waits at the phone.
+      if (/rate limit|429|quota|free tier/i.test(msg)) {
+        rateLimited = true;
+        break;
+      }
     }
   }
 
-  // Every model was unreachable. The demo must never dead-end, so degrade to
-  // something still in voice and still true.
+  // The demo must never dead-end — but it must also never claim it failed to
+  // understand when the truth is that it could not reach a model. Saying "I did
+  // not follow that" here would be the one lie this whole demo argues against.
   return Response.json({
-    lines: [
-      "I did not follow that.",
-      "Tell me what you ate, tell me what changed about your training, or ask me why one of your numbers is what it is.",
-    ],
+    lines: rateLimited
+      ? [
+          "I understood you. I could not reach the model I use for open questions — this demo is on a shared quota and it is spent.",
+          "Give it a minute, or say something I handle locally: what you ate, what changed about training, or why one of your numbers is what it is.",
+        ]
+      : [
+          "I understood you, but the part of me that answers open questions is unreachable right now.",
+          "Tell me what you ate, tell me what changed about your training, or ask me why one of your numbers is what it is — I handle those locally.",
+        ],
     touchesMedical: false,
     offTopic: false,
     source: "degraded" as const,
+    degradedReason: rateLimited ? ("rate_limited" as const) : ("unreachable" as const),
   });
 }
