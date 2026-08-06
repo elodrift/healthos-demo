@@ -8,6 +8,7 @@ import { MessageBubble } from "./MessageBubble";
 import { TypingIndicator } from "./TypingIndicator";
 import { ChipBar } from "./ChipBar";
 import { CardRenderer } from "./cards/CardRenderer";
+import { Composer } from "./Composer";
 
 export function ChatStream() {
   const { revealedBeats, pendingChoice, isDone } = useDemoState();
@@ -122,6 +123,9 @@ export function ChatStream() {
           onSelect={(optionId) => choose(pendingChoice.id, optionId)}
         />
       ) : null}
+
+      {/* the way off the rail — always available, even mid-choice */}
+      <Composer />
     </div>
   );
 }

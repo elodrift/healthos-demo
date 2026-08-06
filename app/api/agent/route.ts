@@ -18,7 +18,17 @@ import { z } from "zod";
 export const runtime = "nodejs";
 export const maxDuration = 20;
 
-const MODEL = "anthropic/claude-haiku-4.5";
+/**
+ * Tried in order. A demo that gets passed around cannot hinge on one model
+ * being reachable — the first that answers wins, and if none do the caller
+ * still gets an in-voice degraded reply rather than a dead end.
+ * Verified against this project's AI Gateway tier.
+ */
+const MODELS = [
+  "openai/gpt-4.1-nano",
+  "openai/gpt-4o-mini",
+  "google/gemini-2.5-flash-lite",
+] as const;
 
 const Body = z.object({
   message: z.string().min(1).max(600),
@@ -90,35 +100,47 @@ export async function POST(req: Request) {
     .map((m) => `${m.role === "user" ? "User" : "HealthOS"}: ${m.text}`)
     .join("\n");
 
-  try {
-    const { output } = await generateText({
-      model: MODEL,
-      temperature: 0.4,
-      system: systemPrompt(parsed.state),
-      output: Output.object({ schema: Reply }),
-      prompt: [history && `Recent conversation:\n${history}`, `User just said: ${parsed.message}`]
-        .filter(Boolean)
-        .join("\n\n"),
-    });
+  const prompt = [
+    history && `Recent conversation:\n${history}`,
+    `User just said: ${parsed.message}`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
-    return Response.json({
-      lines: output.lines.slice(0, 3),
-      touchesMedical: output.touchesMedical,
-      offTopic: output.offTopic,
-      source: "model" as const,
-    });
-  } catch (error) {
-    console.log("[v0] agent fallback failed:", error instanceof Error ? error.message : error);
-    // The demo must never dead-end on a network failure. Degrade to something
-    // that is still in voice and still true.
-    return Response.json({
-      lines: [
-        "I did not follow that.",
-        "Tell me what you ate, tell me what changed about your training, or ask me why one of your numbers is what it is.",
-      ],
-      touchesMedical: false,
-      offTopic: false,
-      source: "degraded" as const,
-    });
+  const debugErrors: string[] = [];
+  for (const model of MODELS) {
+    try {
+      const { output } = await generateText({
+        model,
+        temperature: 0.4,
+        system: systemPrompt(parsed.state),
+        output: Output.object({ schema: Reply }),
+        prompt,
+      });
+
+      return Response.json({
+        lines: output.lines.slice(0, 3),
+        touchesMedical: output.touchesMedical,
+        offTopic: output.offTopic,
+        source: "model" as const,
+      });
+    } catch (error) {
+      // Unavailable, rate-limited, or refused the schema — try the next one.
+      const msg = error instanceof Error ? error.message : String(error);
+      debugErrors.push(`${model}: ${msg}`);
+      console.log(`[v0] agent model ${model} failed:`, msg);
+    }
   }
+
+  // Every model was unreachable. The demo must never dead-end, so degrade to
+  // something still in voice and still true.
+  return Response.json({
+    lines: [
+      "I did not follow that.",
+      "Tell me what you ate, tell me what changed about your training, or ask me why one of your numbers is what it is.",
+    ],
+    touchesMedical: false,
+    offTopic: false,
+    source: "degraded" as const,
+  });
 }
