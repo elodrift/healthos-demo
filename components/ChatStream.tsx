@@ -17,9 +17,31 @@ export function ChatStream() {
   const setHighlight = usePlayerStore((s) => s.setHighlight);
   const choose = usePlayerStore((s) => s.choose);
 
-  const endRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    const box = scrollRef.current;
+    if (!box) return;
+
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const behavior: ScrollBehavior = reduce ? "auto" : "smooth";
+
+    // Chasing the bottom of the stream hides the TOP of any turn taller than
+    // the column — which is exactly the revision card at the climax. When the
+    // newest turn doesn't fit, align its top edge instead so the headline
+    // ("TARGETS REVISED", the struck-through numbers) is what lands in view.
+    const beats = box.querySelectorAll<HTMLElement>("[data-beat]");
+    const newest = beats[beats.length - 1];
+
+    if (newest && newest.offsetHeight > box.clientHeight - 24) {
+      // rect-delta rather than offsetTop: the beat's offsetParent is the
+      // positioned wrapper, not this scroll box, so offsetTop would be skewed.
+      const top =
+        box.scrollTop + newest.getBoundingClientRect().top - box.getBoundingClientRect().top - 12;
+      box.scrollTo({ top, behavior });
+      return;
+    }
+    box.scrollTo({ top: box.scrollHeight, behavior });
   }, [revealedBeats.length, typing, pendingChoice]);
 
   return (
@@ -43,6 +65,7 @@ export function ChatStream() {
        * chips instead of stranding it at the top of a tall empty column.
        */}
       <div
+        ref={scrollRef}
         className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-4"
         role="log"
         aria-live="polite"
@@ -56,24 +79,22 @@ export function ChatStream() {
 
             if (beat.kind === "message") {
               return (
-                <MessageBubble
-                  key={beat.id}
-                  speaker={beat.speaker}
-                  text={beat.text}
-                  time={beat.time}
-                  highlighted={highlighted}
-                  onHover={onHover}
-                />
+                <div key={beat.id} data-beat>
+                  <MessageBubble
+                    speaker={beat.speaker}
+                    text={beat.text}
+                    time={beat.time}
+                    highlighted={highlighted}
+                    onHover={onHover}
+                  />
+                </div>
               );
             }
             if (beat.kind === "card") {
               return (
-                <CardRenderer
-                  key={beat.id}
-                  card={beat.card}
-                  highlighted={highlighted}
-                  onHover={onHover}
-                />
+                <div key={beat.id} data-beat>
+                  <CardRenderer card={beat.card} highlighted={highlighted} onHover={onHover} />
+                </div>
               );
             }
             return null; // choice beats become chips; close beats are handled below
@@ -92,8 +113,6 @@ export function ChatStream() {
               </span>
             </motion.div>
           ) : null}
-
-          <div ref={endRef} />
         </div>
       </div>
 
