@@ -451,19 +451,32 @@ export function respond(intent: Intent, s: AgentSnapshot): Beat[] {
 
     /* ---------------------------------------------------------------- */
     case "share": {
+      const lastLog = s.loggedLabels[s.loggedLabels.length - 1];
       return [
-        say("I can put it on the feed. Your macros go with it, so it counts as logged.", t),
+        say(
+          lastLog
+            ? `I can post ${lastLog.toLowerCase()} to Community. It stays logged either way — posting only changes who else can see it.`
+            : "I can post to Community once you have logged something. It stays logged either way — posting only changes who else can see it.",
+          t,
+        ),
+        // The only honest case for sharing, and the one worth making: the
+        // community numbers that tightened YOUR estimates were somebody else's
+        // logs. Posting pays that back. No streaks, no kudos, no vanity metric.
+        say(
+          "Worth knowing what it actually does: your numbers join the sample for that dish, so the next person guessing at it gets a narrower range than you got. The reverse already happened to you today.",
+          t,
+        ),
         show(
           {
             type: "proposals",
             items: [
-              "Open the feed and share today's meal",
+              "Post it — add my numbers to the sample",
               "Keep it private — logged, not posted",
             ],
           },
           t,
         ),
-        say("The feed tab at the bottom has the rest of it.", t),
+        say("Community, at the bottom of the screen, is where it lands.", t),
       ];
     }
 

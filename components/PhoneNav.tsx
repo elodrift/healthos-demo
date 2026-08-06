@@ -19,7 +19,7 @@ export function PhoneNav() {
   return (
     <nav
       aria-label="App sections"
-      className="flex shrink-0 gap-1 border-t border-base-700 bg-base-900 px-1.5 py-1.5"
+      className="flex shrink-0 gap-1 border-t border-base-700 bg-base-900 px-1.5 py-1"
     >
       {SCREENS.map((screen) => {
         const active = phoneScreen === screen.id;
@@ -29,7 +29,7 @@ export function PhoneNav() {
             type="button"
             aria-current={active ? "page" : undefined}
             onClick={() => setPhoneScreen(screen.id)}
-            className={`flex-1 rounded-full py-2 text-[12px] font-medium transition ${
+            className={`flex-1 rounded-full py-1.5 text-[11px] font-medium tracking-wide transition ${
               active
                 ? "bg-accent-green/15 text-accent-green"
                 : "text-ink-lo hover:text-ink-mid"

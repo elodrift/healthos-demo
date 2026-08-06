@@ -17,6 +17,7 @@ export function ChatStream() {
   const highlightBeatId = usePlayerStore((s) => s.highlightBeatId);
   const setHighlight = usePlayerStore((s) => s.setHighlight);
   const choose = usePlayerStore((s) => s.choose);
+  const paused = usePlayerStore((s) => s.paused);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -25,24 +26,38 @@ export function ChatStream() {
     if (!box) return;
 
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const behavior: ScrollBehavior = reduce ? "auto" : "smooth";
 
-    // Chasing the bottom of the stream hides the TOP of any turn taller than
-    // the column — which is exactly the revision card at the climax. When the
-    // newest turn doesn't fit, align its top edge instead so the headline
-    // ("TARGETS REVISED", the struck-through numbers) is what lands in view.
-    const beats = box.querySelectorAll<HTMLElement>("[data-beat]");
-    const newest = beats[beats.length - 1];
+    const settle = (behavior: ScrollBehavior) => {
+      // Chasing the bottom of the stream hides the TOP of any turn taller than
+      // the column — which is exactly the revision card at the climax. When the
+      // newest turn doesn't fit, align its top edge instead so the headline
+      // ("TARGETS REVISED", the struck-through numbers) is what lands in view.
+      const beats = box.querySelectorAll<HTMLElement>("[data-beat]");
+      const newest = beats[beats.length - 1];
 
-    if (newest && newest.offsetHeight > box.clientHeight - 24) {
-      // rect-delta rather than offsetTop: the beat's offsetParent is the
-      // positioned wrapper, not this scroll box, so offsetTop would be skewed.
-      const top =
-        box.scrollTop + newest.getBoundingClientRect().top - box.getBoundingClientRect().top - 12;
-      box.scrollTo({ top, behavior });
-      return;
-    }
-    box.scrollTo({ top: box.scrollHeight, behavior });
+      if (newest && newest.offsetHeight > box.clientHeight - 24) {
+        // rect-delta rather than offsetTop: the beat's offsetParent is the
+        // positioned wrapper, not this scroll box, so offsetTop would be skewed.
+        const top =
+          box.scrollTop + newest.getBoundingClientRect().top - box.getBoundingClientRect().top - 12;
+        box.scrollTo({ top, behavior });
+        return;
+      }
+      box.scrollTo({ top: box.scrollHeight, behavior });
+    };
+
+    settle(reduce ? "auto" : "smooth");
+
+    /*
+     * A beat's entrance animation grows its height AFTER this effect runs, so
+     * the scrollHeight we just used was short and the last line of a long reply
+     * stayed clipped below the fold. Re-pin instantly whenever the content
+     * actually resizes — the correction is a few dozen pixels, so "auto" reads
+     * as the tail of the original smooth scroll rather than a second movement.
+     */
+    const observer = new ResizeObserver(() => settle("auto"));
+    for (const child of Array.from(box.children)) observer.observe(child);
+    return () => observer.disconnect();
   }, [revealedBeats.length, typing, pendingChoice]);
 
   return (
@@ -117,7 +132,14 @@ export function ChatStream() {
         </div>
       </div>
 
-      {pendingChoice ? (
+      {/*
+       * Once the user types their own message the day is paused, and the
+       * scripted chip becomes a stale suggestion for a conversation they have
+       * already left. Inside a 390px phone it was costing ~90px — over a third
+       * of the reading area — so it yields to the live conversation. The
+       * Composer still renders "RESUME THE DAY", which is the way back.
+       */}
+      {pendingChoice && !paused ? (
         <ChipBar
           options={pendingChoice.options.map((o) => ({ id: o.id, label: o.label }))}
           onSelect={(optionId) => choose(pendingChoice.id, optionId)}

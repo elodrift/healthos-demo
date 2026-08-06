@@ -27,7 +27,7 @@ function Tile({
   const confirmedPct = Math.max(0, pct - estPct);
 
   return (
-    <div className="min-w-0 flex-1 rounded-xl border border-base-700 bg-base-850/80 px-2.5 py-2">
+    <div className="min-w-0 flex-1 rounded-xl border border-base-700 bg-base-850/80 px-2.5 py-1.5">
       <div className="flex items-center gap-1">
         <span className="truncate font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-lo">
           {label}
@@ -52,7 +52,7 @@ function Tile({
         {unit}
       </div>
       <div
-        className="mt-2 flex h-1.5 w-full overflow-hidden rounded-full bg-base-700"
+        className="mt-1.5 flex h-1.5 w-full overflow-hidden rounded-full bg-base-700"
         role="progressbar"
         aria-valuenow={Math.round(consumed)}
         aria-valuemin={0}
@@ -94,17 +94,21 @@ export function MacroHeader({
   revised: boolean;
 }) {
   return (
-    <header className="border-b border-base-700 bg-base-900/95 px-3 pb-3 pt-3 backdrop-blur">
-      <div className="flex items-center gap-2.5">
+    <header className="border-b border-base-700 bg-base-900/95 px-3 pb-2.5 pt-2 backdrop-blur">
+      {/*
+       * One line, not two. Inside a fixed-height phone every row here is taken
+       * directly from the conversation, and the app's own name is the least
+       * useful thing on screen — the page header already says it.
+       */}
+      <div className="flex items-center gap-2">
         <span
           aria-hidden="true"
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-green/15 font-mono text-[11px] font-bold text-accent-green"
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-green/15 font-mono text-[10px] font-bold text-accent-green"
         >
           OS
         </span>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold text-ink-hi">HealthOS</div>
-          <div className="truncate text-[11px] text-ink-mid">co-pilot for {name}</div>
+        <div className="min-w-0 flex-1 truncate text-[12px] text-ink-mid">
+          co-pilot for <span className="font-semibold text-ink-hi">{name}</span>
         </div>
         <span className="shrink-0 rounded-full border border-base-600 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-ink-mid">
           {goalModeBadge[mode]}
@@ -116,7 +120,7 @@ export function MacroHeader({
        * moves (320g -> 240g). Without it the header stays silent during the one
        * moment the whole demo is built around.
        */}
-      <div className="mt-3 flex gap-1.5">
+      <div className="mt-2 flex gap-1.5">
         <Tile
           label="Protein"
           consumed={consumed.protein_g}
