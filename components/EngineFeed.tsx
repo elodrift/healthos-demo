@@ -1,80 +1,98 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
-import type { SourcedEvent } from "@/lib/scenario-engine";
-import { reasonFor } from "@/lib/fixtures/copy";
-import type { DemoEvent } from "@/lib/events";
+// Renders the append-only event array directly. Nothing is derived here beyond
+// how each event prints — this is the trust moment.
 
-const TYPE_LABEL: Record<DemoEvent["t"], string> = {
-  SESSION_OPENED: "Session opened",
-  FOOD_LOGGED: "Food logged",
-  TRAINING_CHANGED: "Training changed",
-  TARGETS_REVISED: "Targets revised",
-  DAY_CLOSED: "Day closed",
-};
+import { AnimatePresence, motion } from "framer-motion";
+import type { SourcedEvent } from "@/lib/script-engine";
+import { engineEntryFor } from "@/lib/fixtures/engine-copy";
+
+const toneStyles = {
+  green: "border-accent-green/35 bg-accent-green/[0.06]",
+  amber: "border-accent-amber/40 bg-accent-amber/[0.07]",
+  red: "border-accent-red/40 bg-accent-red/[0.06]",
+  neutral: "border-base-700 bg-base-850/70",
+} as const;
+
+const toneText = {
+  green: "text-accent-green",
+  amber: "text-accent-amber",
+  red: "text-accent-red",
+  neutral: "text-ink-mid",
+} as const;
 
 export function EngineFeed({
   sourced,
-  highlightedBeatId,
+  highlightBeatId,
   onHover,
 }: {
   sourced: SourcedEvent[];
-  highlightedBeatId: string | null;
+  highlightBeatId: string | null;
   onHover: (beatId: string | null) => void;
 }) {
   return (
-    <div className="flex h-full flex-col overflow-y-auto px-3 py-3">
-      <div className="mb-2 px-1 text-[10px] font-medium uppercase tracking-widest text-ink-lo">
-        The engine — event log, reasons attached
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-baseline justify-between border-b border-base-700 px-3 py-2.5">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-lo">
+          The engine
+        </span>
+        <span className="font-mono text-[10px] tabular-nums text-ink-lo">
+          {sourced.length} events
+        </span>
       </div>
-      <AnimatePresence initial={false}>
-        {sourced.map((s, i) => {
-          const isHighlighted = s.beatId !== "__seed__" && s.beatId === highlightedBeatId;
-          return (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, x: 14 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.28, ease: "easeOut" }}
-              onMouseEnter={() => onHover(s.beatId)}
-              onMouseLeave={() => onHover(null)}
-              className={`mb-2 rounded-lg border px-3 py-2.5 text-xs transition-colors ${
-                isHighlighted ? "border-accent-green/70 bg-accent-green/5" : "border-base-700 bg-base-850/60"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-wide text-ink-lo">
-                  {TYPE_LABEL[s.event.t]}
-                </span>
-                {s.event.t === "FOOD_LOGGED" && (
-                  <span className="rounded-full bg-base-700 px-2 py-0.5 text-[10px] font-semibold text-ink-mid">
-                    {s.event.confidence}
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        <AnimatePresence initial={false}>
+          {sourced.map((s) => {
+            const entry = engineEntryFor(s.event);
+            const linked = s.beatId !== "__seed__" && s.beatId === highlightBeatId;
+            return (
+              <motion.button
+                key={s.index}
+                type="button"
+                layout
+                initial={{ opacity: 0, x: 16 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ type: "spring", stiffness: 260, damping: 26 }}
+                onMouseEnter={() => onHover(s.beatId)}
+                onMouseLeave={() => onHover(null)}
+                onFocus={() => onHover(s.beatId)}
+                onBlur={() => onHover(null)}
+                onClick={() => onHover(linked ? null : s.beatId)}
+                className={`mb-2 block w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  toneStyles[entry.tone]
+                } ${linked ? "ring-2 ring-accent-green/70" : ""}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`font-mono text-[11px] font-semibold ${toneText[entry.tone]}`}>
+                    {entry.name}
                   </span>
-                )}
-              </div>
-              <p className="mt-1 leading-relaxed text-ink-mid">{reasonFor(s.event)}</p>
-              {s.event.t === "FOOD_LOGGED" && (
-                <p className="mt-1 tabular-nums text-ink-lo">
-                  {s.event.macros.protein_g}g protein · {s.event.macros.kcal} kcal
-                  {s.event.macros.kcal_range
-                    ? ` (range ${s.event.macros.kcal_range[0]}–${s.event.macros.kcal_range[1]})`
-                    : ""}
-                </p>
-              )}
-              {s.event.t === "TARGETS_REVISED" && (
-                <p className="mt-1 tabular-nums text-ink-lo">
-                  → {s.event.targets.protein_g}g protein / {s.event.targets.kcal} kcal
-                </p>
-              )}
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-      {sourced.length === 0 && (
-        <p className="px-2 py-4 text-xs text-ink-lo">
-          No events yet — the log fills in as the conversation plays.
-        </p>
-      )}
+                  <span className="font-mono text-[10px] tabular-nums text-ink-lo">{s.at}</span>
+                </div>
+                <div className="mt-1 font-mono text-[10px] uppercase tracking-wider text-ink-lo">
+                  {entry.detail}
+                </div>
+                <p className="mt-1 text-[12px] leading-relaxed text-ink-mid">{entry.reason}</p>
+                {s.event.t === "FOOD_LOGGED" ? (
+                  <p className="mt-1 font-mono text-[11px] tabular-nums text-ink-lo">
+                    {s.event.macros.protein_g}g protein · {s.event.macros.kcal} kcal
+                    {s.event.macros.kcal_range
+                      ? ` · range ${s.event.macros.kcal_range[0]}–${s.event.macros.kcal_range[1]}`
+                      : ""}{" "}
+                    · v{s.event.snapshotVersion + 1}
+                  </p>
+                ) : null}
+                {s.event.t === "TARGETS_REVISED" ? (
+                  <p className="mt-1 font-mono text-[11px] tabular-nums text-ink-lo">
+                    → {s.event.targets.protein_g}g protein · {s.event.targets.carbs_g}g carbs ·{" "}
+                    {s.event.targets.kcal} kcal
+                  </p>
+                ) : null}
+              </motion.button>
+            );
+          })}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

@@ -1,27 +1,85 @@
 import Link from "next/link";
+import { DemoFooter } from "@/components/DemoFooter";
+
+const strip = [
+  {
+    title: "Biomarker-aware",
+    body: "Your protein floor comes from your lipid panel, not a calculator. Every target shows where it came from.",
+  },
+  {
+    title: "Adapts all day",
+    body: "Skipped session, unplanned restaurant, schedule chaos — targets revise the moment the day changes.",
+  },
+  {
+    title: "Every decision explained",
+    body: "A deterministic engine logs each decision with its cause. You can read the reasoning, event by event.",
+  },
+];
 
 export default function LandingPage() {
   return (
-    <main className="flex min-h-[85vh] flex-col items-center justify-center gap-8 px-6 text-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent-green/15 text-2xl text-accent-green">
-          ♥
-        </div>
-        <h1 className="max-w-xl text-2xl font-semibold leading-snug text-ink-hi sm:text-3xl">
-          HealthOS re-plans your day the moment life changes it.
-        </h1>
-        <p className="max-w-md text-sm text-ink-mid">
-          Live one disrupted Saturday — a boat trip nobody planned meals around — and watch the
-          plan adapt in real time.
-        </p>
+    <main className="flex min-h-dvh flex-col">
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 pb-10 pt-8 lg:px-8">
+        <header className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-green/15 font-mono text-[11px] font-bold text-accent-green"
+            >
+              OS
+            </span>
+            <span className="text-[15px] font-semibold tracking-tight">HealthOS</span>
+          </span>
+          <a
+            href="#how-it-decides"
+            className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-lo transition hover:text-accent-green"
+          >
+            How it decides
+          </a>
+        </header>
+
+        <section className="flex flex-1 flex-col justify-center py-14">
+          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent-green">
+            One day with HealthOS
+          </span>
+          <h1 className="mt-4 max-w-2xl text-pretty text-[34px] font-semibold leading-[1.1] tracking-tight text-ink-hi sm:text-5xl">
+            Your health, orchestrated. All day. Every day.
+          </h1>
+          <p className="mt-5 max-w-xl text-pretty text-[15px] leading-relaxed text-ink-mid sm:text-base">
+            HealthOS adapts your nutrition and training the moment life changes — grounded in your
+            bloodwork, honest about uncertainty.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <Link
+              href="/day"
+              className="rounded-full bg-accent-green px-7 py-3.5 text-[15px] font-semibold text-base-950 transition hover:brightness-110"
+            >
+              Play one day
+            </Link>
+            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-lo">
+              ~3 minutes · no signup
+            </span>
+          </div>
+        </section>
+
+        <section id="how-it-decides" className="scroll-mt-8 pb-4">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {strip.map((card, i) => (
+              <div
+                key={card.title}
+                className="rounded-2xl border border-base-700 bg-base-850 px-4 py-5 shadow-card"
+              >
+                <span className="font-mono text-[10px] tabular-nums text-accent-green">
+                  {`0${i + 1}`}
+                </span>
+                <h2 className="mt-2 text-[15px] font-semibold text-ink-hi">{card.title}</h2>
+                <p className="mt-1.5 text-[13px] leading-relaxed text-ink-mid">{card.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
-      <Link
-        href="/day"
-        className="rounded-full bg-accent-green px-8 py-3 text-sm font-semibold text-base-950 transition hover:opacity-90"
-      >
-        Start the demo
-      </Link>
-      <p className="text-[11px] text-ink-lo">Simulated demo — not medical advice.</p>
+      <DemoFooter />
     </main>
   );
 }

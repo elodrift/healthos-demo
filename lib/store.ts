@@ -63,11 +63,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       schedule();
     };
 
-    // A pending choice waits for the visitor, then auto-plays the first option.
+    // A pending choice renders as chips, waits for the visitor, then auto-plays
+    // the first option so the day never stalls.
     if (next.kind === "choice") {
-      set({ typing: false, dimming: false });
+      set((s) => ({ revealCount: s.revealCount + 1, typing: false, dimming: false }));
       const t = setTimeout(() => {
-        set((s) => ({ revealCount: s.revealCount + 1, timer: null }));
+        set({ timer: null });
         get().choose(next.id, next.options[0].id);
       }, AUTO_CHOICE_MS);
       set({ timer: t });

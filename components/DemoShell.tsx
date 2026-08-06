@@ -1,68 +1,130 @@
 "use client";
 
+import Link from "next/link";
 import { usePlayerStore } from "@/lib/store";
 import { useDemoState } from "@/lib/useDemoState";
+import { personaById } from "@/lib/fixtures/personas";
+import { dayClock } from "@/lib/fixtures/day-script";
 import { MacroHeader } from "./MacroHeader";
 import { PhoneFrame } from "./PhoneFrame";
 import { ChatStream } from "./ChatStream";
 import { EngineFeed } from "./EngineFeed";
 import { TimelineScrubber } from "./TimelineScrubber";
+import { QuickSetup } from "./QuickSetup";
+import { DemoFooter } from "./DemoFooter";
 
 export function DemoShell() {
-  const { sourced, revealedBeats, timeline, demoState } = useDemoState();
+  const { sourced, demoState, currentTime, clockIndex, isDone } = useDemoState();
+  const phase = usePlayerStore((s) => s.phase);
   const activeTab = usePlayerStore((s) => s.activeTab);
   const setActiveTab = usePlayerStore((s) => s.setActiveTab);
-  const highlightedBeatId = usePlayerStore((s) => s.highlightedBeatId);
+  const highlightBeatId = usePlayerStore((s) => s.highlightBeatId);
   const setHighlight = usePlayerStore((s) => s.setHighlight);
-  const autoplay = usePlayerStore((s) => s.autoplay);
-  const setAutoplay = usePlayerStore((s) => s.setAutoplay);
-  const scrubTo = usePlayerStore((s) => s.scrubTo);
+  const scrubToIndex = usePlayerStore((s) => s.scrubToIndex);
+  const replayFromDisruption = usePlayerStore((s) => s.replayFromDisruption);
+  const personaId = usePlayerStore((s) => s.personaId);
+  const mode = usePlayerStore((s) => s.mode);
+
+  const persona = personaById(personaId);
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-3 pt-4 lg:px-6">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold tracking-tight text-ink-hi">HealthOSJourney</span>
-        <span className="rounded-full border border-base-600 bg-base-850 px-2.5 py-1 text-[10px] font-medium uppercase tracking-wide text-accent-green">
-          strict &amp; sustainable
+    <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col lg:px-6 lg:py-6">
+      <div className="hidden items-center justify-between pb-4 lg:flex">
+        <Link href="/" className="text-sm font-semibold tracking-tight text-ink-hi">
+          HealthOS
+        </Link>
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ink-lo">
+          One day with HealthOS
         </span>
       </div>
 
-      <MacroHeader targets={demoState.targets} consumed={demoState.consumed} />
+      <div className="flex min-h-0 flex-1 flex-col items-stretch gap-4 lg:flex-row lg:justify-center">
+        <div
+          className={`flex min-h-0 flex-1 flex-col ${
+            activeTab === "channel" ? "flex" : "hidden lg:flex"
+          } lg:flex-none`}
+        >
+          <PhoneFrame>
+            {phase === "setup" ? (
+              <>
+                <div className="border-b border-base-700 px-4 py-3">
+                  <div className="text-[13px] font-semibold text-ink-hi">Quick setup</div>
+                  <div className="text-[11px] text-ink-mid">Twenty seconds, then the day runs.</div>
+                </div>
+                <QuickSetup />
+              </>
+            ) : (
+              <>
+                <MacroHeader
+                  targets={demoState.targets}
+                  consumed={demoState.consumed}
+                  estimated={demoState.estimated}
+                  name={persona.displayName}
+                  mode={mode}
+                  revised={demoState.revisions.length > 0}
+                />
+                <TimelineScrubber
+                  stops={dayClock}
+                  clockIndex={clockIndex}
+                  currentTime={currentTime}
+                  onScrub={scrubToIndex}
+                />
+                <ChatStream />
+                {isDone ? (
+                  <div className="flex flex-col gap-2 border-t border-base-700 bg-base-900 px-3 py-3">
+                    <Link
+                      href="/results"
+                      className="rounded-full bg-accent-green px-5 py-3 text-center text-[15px] font-semibold text-base-950 transition hover:brightness-110"
+                    >
+                      See 4 weeks later
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={replayFromDisruption}
+                      className="rounded-full border border-base-600 px-5 py-3 text-center text-[13px] font-medium text-ink-mid transition hover:border-accent-green/60 hover:text-accent-green"
+                    >
+                      Replay the day differently
+                    </button>
+                  </div>
+                ) : null}
+              </>
+            )}
+          </PhoneFrame>
+        </div>
 
-      <div className="flex gap-1 rounded-full border border-base-700 bg-base-850 p-1 lg:hidden">
+        <div
+          className={`min-h-0 flex-1 flex-col ${
+            activeTab === "engine" ? "flex" : "hidden lg:flex"
+          } lg:max-w-[440px]`}
+        >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-base-700 bg-base-900/60 lg:h-[844px] lg:max-h-[86vh] lg:flex-none lg:rounded-3xl lg:border">
+            <EngineFeed
+              sourced={sourced}
+              highlightBeatId={highlightBeatId}
+              onHover={setHighlight}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-1 border-t border-base-700 bg-base-900 p-1.5 lg:hidden">
         {(["channel", "engine"] as const).map((tab) => (
           <button
             key={tab}
+            type="button"
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 rounded-full py-2 text-sm font-medium transition ${
-              activeTab === tab ? "bg-accent-green/15 text-accent-green" : "text-ink-lo"
+            className={`flex-1 rounded-full py-2.5 text-[13px] font-medium transition ${
+              activeTab === tab
+                ? "bg-accent-green/15 text-accent-green"
+                : "text-ink-lo hover:text-ink-mid"
             }`}
           >
-            {tab === "channel" ? "The channel" : "The engine"}
+            {tab === "channel" ? "The channel" : `The engine · ${sourced.length}`}
           </button>
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className={activeTab === "channel" ? "block" : "hidden lg:block"}>
-          <PhoneFrame>
-            <TimelineScrubber
-              total={timeline.length}
-              current={revealedBeats.length}
-              onScrub={(i) => scrubTo(i)}
-              autoplay={autoplay}
-              onToggleAutoplay={setAutoplay}
-            />
-            <ChatStream />
-          </PhoneFrame>
-        </div>
-
-        <div className={activeTab === "engine" ? "block" : "hidden lg:block"}>
-          <div className="mx-auto h-[720px] max-h-[80vh] w-full max-w-[420px] rounded-[2rem] border border-base-700 bg-base-900/60 lg:h-[760px]">
-            <EngineFeed sourced={sourced} highlightedBeatId={highlightedBeatId} onHover={setHighlight} />
-          </div>
-        </div>
-      </div>
+      <DemoFooter />
     </div>
   );
 }

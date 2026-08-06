@@ -4,7 +4,7 @@ import { DemoShell } from "@/components/DemoShell";
 
 export default function DayPage() {
   return (
-    <main className="pb-6">
+    <main className="flex min-h-dvh flex-col">
       <DemoShell />
     </main>
   );
