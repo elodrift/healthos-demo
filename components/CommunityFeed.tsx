@@ -4,6 +4,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { usePlayerStore } from "@/lib/store";
+import { DishLearnMore } from "./DishLearnMore";
 import {
   authorById,
   dishById,
@@ -239,6 +240,8 @@ export function CommunityFeed() {
               <p className="mt-3 text-[14px] leading-relaxed text-ink-hi">{post.caption}</p>
 
               <RangeStrip dish={dish} />
+
+              <DishLearnMore dish={dish} />
 
               {/* Honesty, not applause. This is what the feed rewards. */}
               {post.honestyNote ? (

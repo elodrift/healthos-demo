@@ -9,7 +9,7 @@
  */
 
 import type { DemoEvent, Macros, Targets } from "@/lib/events";
-import { dishMacros, type Dish } from "@/lib/fixtures/community";
+import { dishMacros, tightestVenue, venueGain, type Dish } from "@/lib/fixtures/community";
 import type { MedicalRule } from "@/lib/fixtures/personas";
 import type { Beat, CardSpec } from "@/lib/fixtures/script-types";
 import type { Intent } from "./nlu";
@@ -137,6 +137,26 @@ export function feedLogBeats(dish: Dish, s: AgentSnapshot): Beat[] {
       ),
     );
   }
+
+  /*
+   * The teaching moment, placed where it is actually actionable. Telling
+   * someone how to log a dish better is worth most immediately after they have
+   * logged it — not buried in a reference screen they would have to go find.
+   *
+   * Venue-specific when naming the place genuinely narrows the range, and the
+   * dish's own tip otherwise. This is why `tightestVenue` returns null for
+   * portion-driven dishes: it stops us coaching a habit that would not pay off.
+   */
+  const venue = tightestVenue(dish);
+  const gain = venueGain(dish);
+  beats.push(
+    venue && gain
+      ? say(
+          `Next time, tell me where. Logs from ${venue.name} land in a range ${gain}% tighter than the unnamed pile, so naming the place does more for your numbers than describing the food.`,
+          t,
+        )
+      : say(dish.logTip, t),
+  );
 
   return beats;
 }
