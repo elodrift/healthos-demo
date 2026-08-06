@@ -28,7 +28,7 @@ export function DemoShell() {
   const persona = personaById(personaId);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col lg:px-6 lg:py-6">
+    <div className="mx-auto flex min-h-dvh w-full max-w-[1000px] flex-col lg:px-6 lg:py-6">
       <div className="hidden items-center justify-between pb-4 lg:flex">
         <Link href="/" className="text-sm font-semibold tracking-tight text-ink-hi">
           HealthOS
@@ -95,7 +95,7 @@ export function DemoShell() {
         <div
           className={`min-h-0 flex-1 flex-col ${
             activeTab === "engine" ? "flex" : "hidden lg:flex"
-          } lg:max-w-[440px]`}
+          } lg:w-[420px] lg:flex-none`}
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden border-t border-base-700 bg-base-900/60 lg:h-[844px] lg:max-h-[86vh] lg:flex-none lg:rounded-3xl lg:border">
             <EngineFeed

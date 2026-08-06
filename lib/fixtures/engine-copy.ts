@@ -7,7 +7,8 @@ export type EngineEntry = {
   name: string;
   detail: string;
   reason: string;
-  tone: "green" | "amber" | "red" | "neutral";
+  /** "green" marks the decisive lines; everything else stays neutral ink. */
+  tone: "green" | "red" | "neutral";
 };
 
 export function engineEntryFor(event: DemoEvent): EngineEntry {
@@ -27,21 +28,21 @@ export function engineEntryFor(event: DemoEvent): EngineEntry {
             ? "confidence HIGH (planned meal)"
             : `confidence ${event.confidence}`,
         reason: `${event.label} · ${event.cause}`,
-        tone: event.confidence === "HIGH" ? "green" : "amber",
+        tone: event.confidence === "HIGH" ? "green" : "neutral",
       };
     case "TRAINING_CHANGED":
       return {
         name: "TRAINING_CHANGED",
         detail: event.change,
         reason: `cause: ${event.cause}`,
-        tone: "amber",
+        tone: "neutral",
       };
     case "TARGETS_REVISED":
       return {
         name: "TARGETS_REVISED",
         detail: `v${event.version}`,
         reason: [`cause: ${event.reason}`, ...event.notes].join(" · "),
-        tone: "amber",
+        tone: "green",
       };
     case "VARIANCE_PLANNED":
       return {
@@ -62,7 +63,7 @@ export function engineEntryFor(event: DemoEvent): EngineEntry {
         name: "DIAGNOSIS",
         detail: event.code,
         reason: event.causeChain.join(" → "),
-        tone: event.code === "over_by_revision" ? "amber" : "neutral",
+        tone: "neutral",
       };
     case "DAY_CLOSED":
       return {

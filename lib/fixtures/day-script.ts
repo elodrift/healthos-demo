@@ -318,7 +318,7 @@ function eveningRevised(ctx: ScriptContext): Beat[] {
       time: "19:00",
       card: {
         type: "evening-status",
-        tone: "amber",
+        tone: "estimate",
         label: "OVER BY REVISION",
         body: "Protein floor: held. Fat ceiling: held. Both medical rules: held. Nothing from this morning was re-scored, and nothing carries into tomorrow.",
       },

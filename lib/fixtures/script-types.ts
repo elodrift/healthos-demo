@@ -37,7 +37,7 @@ export type CardSpec =
       proteinRange: [number, number];
       note: string;
     }
-  | { type: "evening-status"; tone: "amber" | "green"; label: string; body: string }
+  | { type: "evening-status"; tone: "estimate" | "green"; label: string; body: string }
   | { type: "day-close"; summary: DaySummary };
 
 export type BeatBase = {

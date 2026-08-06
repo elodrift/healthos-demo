@@ -37,14 +37,15 @@ export function TimelineScrubber({
               key={t}
               type="button"
               onClick={() => onScrub(clockIndex[i])}
-              aria-label={`Replay from ${t}`}
+              disabled={!reached}
+              aria-label={reached ? `Replay from ${t}` : `${t} — not reached yet`}
               aria-current={i === activeStop ? "step" : undefined}
-              className={`-mt-3 flex flex-col items-center gap-1 rounded px-1 py-0.5 font-mono text-[9px] tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green ${
+              className={`-mt-3 flex flex-col items-center gap-1 rounded px-1 py-0.5 font-mono text-[9px] tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent-green disabled:cursor-default ${
                 i === activeStop
                   ? "text-accent-green"
                   : reached
                     ? "text-ink-mid hover:text-accent-green"
-                    : "text-ink-lo hover:text-ink-mid"
+                    : "text-ink-lo"
               }`}
             >
               <span

@@ -9,14 +9,12 @@ import { engineEntryFor } from "@/lib/fixtures/engine-copy";
 
 const toneStyles = {
   green: "border-accent-green/35 bg-accent-green/[0.06]",
-  amber: "border-accent-amber/40 bg-accent-amber/[0.07]",
   red: "border-accent-red/40 bg-accent-red/[0.06]",
   neutral: "border-base-700 bg-base-850/70",
 } as const;
 
 const toneText = {
   green: "text-accent-green",
-  amber: "text-accent-amber",
   red: "text-accent-red",
   neutral: "text-ink-mid",
 } as const;

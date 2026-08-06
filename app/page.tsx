@@ -64,15 +64,12 @@ export default function LandingPage() {
 
         <section id="how-it-decides" className="scroll-mt-8 pb-4">
           <div className="grid gap-3 sm:grid-cols-3">
-            {strip.map((card, i) => (
+            {strip.map((card) => (
               <div
                 key={card.title}
                 className="rounded-2xl border border-base-700 bg-base-850 px-4 py-5 shadow-card"
               >
-                <span className="font-mono text-[10px] tabular-nums text-accent-green">
-                  {`0${i + 1}`}
-                </span>
-                <h2 className="mt-2 text-[15px] font-semibold text-ink-hi">{card.title}</h2>
+                <h2 className="text-[15px] font-semibold text-ink-hi">{card.title}</h2>
                 <p className="mt-1.5 text-[13px] leading-relaxed text-ink-mid">{card.body}</p>
               </div>
             ))}

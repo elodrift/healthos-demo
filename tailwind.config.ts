@@ -17,7 +17,7 @@ const config: Config = {
         accent: {
           green: "#3DDC97",
           greendim: "#1C8F66",
-          amber: "#F0B429",
+          /** reserved: the medical never-suspends card only */
           red: "#E5484D",
         },
         ink: {

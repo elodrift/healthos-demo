@@ -13,14 +13,17 @@ export function CardShell({
   highlighted?: boolean;
   onHover?: (hovering: boolean) => void;
   children: React.ReactNode;
-  /** "red" is reserved for the medical NEVER SUSPENDS card only */
-  accent?: "default" | "red" | "amber" | "green";
+  /**
+   * "red" is reserved for the medical NEVER SUSPENDS card only.
+   * "estimate" stays neutral-but-dashed: uncertainty is shown, not colored.
+   */
+  accent?: "default" | "red" | "estimate" | "green";
 }) {
   const border =
     accent === "red"
       ? "border-accent-red/50"
-      : accent === "amber"
-        ? "border-accent-amber/45"
+      : accent === "estimate"
+        ? "border-dashed border-base-500"
         : accent === "green"
           ? "border-accent-green/40"
           : "border-base-700";
@@ -28,11 +31,9 @@ export function CardShell({
   const eyebrowColor =
     accent === "red"
       ? "text-accent-red"
-      : accent === "amber"
-        ? "text-accent-amber"
-        : accent === "green"
-          ? "text-accent-green"
-          : "text-ink-lo";
+      : accent === "green"
+        ? "text-accent-green"
+        : "text-ink-lo";
 
   return (
     <motion.div

@@ -33,9 +33,13 @@ function Tile({
           {label}
         </span>
         {revised ? (
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-accent-amber">
+          <motion.span
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-full bg-accent-green/15 px-1.5 font-mono text-[9px] font-semibold uppercase tracking-wider text-accent-green"
+          >
             v2
-          </span>
+          </motion.span>
         ) : null}
       </div>
       <div className="mt-0.5 flex items-baseline gap-1">

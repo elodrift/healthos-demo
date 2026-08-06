@@ -31,7 +31,7 @@ export function CardRenderer({
   switch (card.type) {
     case "planned-variance":
       return (
-        <CardShell eyebrow={card.tag} highlighted={highlighted} onHover={onHover} accent="amber">
+        <CardShell eyebrow={card.tag} highlighted={highlighted} onHover={onHover} accent="green">
           <p className="text-lg font-semibold leading-snug text-ink-hi">
             {card.headline}
           </p>
@@ -122,9 +122,14 @@ export function CardRenderer({
 
     case "estimate":
       return (
-        <CardShell eyebrow="Estimate · unplanned meal" highlighted={highlighted} onHover={onHover} accent="amber">
+        <CardShell
+          eyebrow="Estimate · unplanned meal"
+          highlighted={highlighted}
+          onHover={onHover}
+          accent="estimate"
+        >
           <div className="mb-3 flex items-center gap-2">
-            <span className="rounded-full border border-accent-amber/50 bg-accent-amber/15 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-accent-amber">
+            <span className="rounded-full border border-dashed border-base-500 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-ink-mid">
               Confidence: {card.confidence}
             </span>
           </div>
@@ -157,8 +162,8 @@ export function CardRenderer({
         >
           <span
             className={`inline-block rounded-full px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider ${
-              card.tone === "amber"
-                ? "border border-accent-amber/50 bg-accent-amber/15 text-accent-amber"
+              card.tone === "estimate"
+                ? "border border-dashed border-base-500 text-ink-mid"
                 : "border border-accent-green/50 bg-accent-green/15 text-accent-green"
             }`}
           >
@@ -171,7 +176,7 @@ export function CardRenderer({
     case "day-close": {
       const cols: Array<{ head: string; items: string[]; tone: string }> = [
         { head: "Known", items: card.summary.known, tone: "text-accent-green" },
-        { head: "Uncertain", items: card.summary.uncertain, tone: "text-accent-amber" },
+        { head: "Uncertain", items: card.summary.uncertain, tone: "text-ink-lo" },
         { head: "What mattered", items: card.summary.whatMattered, tone: "text-ink-hi" },
       ];
       return (

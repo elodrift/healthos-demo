@@ -75,9 +75,7 @@ function Row({ row, revealed, delay }: { row: RevisionRow; revealed: boolean; de
             initial={changed ? { opacity: 0, x: 28 } : { opacity: 1 }}
             animate={{ opacity: 1, x: 0 }}
             transition={spring}
-            className={`text-2xl font-semibold tabular-nums ${
-              changed ? "text-accent-amber" : "text-accent-green"
-            }`}
+            className="text-2xl font-semibold tabular-nums text-accent-green"
           >
             <RevisionNumber value={row.to} />
             {row.unit}
@@ -115,19 +113,19 @@ export function TargetRevisionCard({
       transition={spring}
       onMouseEnter={() => onHover?.(true)}
       onMouseLeave={() => onHover?.(false)}
-      className={`overflow-hidden rounded-2xl border border-accent-amber/45 bg-base-850 shadow-card ${
+      className={`overflow-hidden rounded-2xl border border-accent-green/50 bg-base-850 shadow-card ${
         highlighted ? "ring-2 ring-accent-green/70" : ""
       }`}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-accent-amber/25 bg-accent-amber/10 px-4 py-2.5">
-        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-amber">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-accent-green/25 bg-accent-green/10 px-4 py-2.5">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-accent-green">
           Targets revised · v2
         </span>
         <motion.span
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ ...spring, delay: 0.55 }}
-          className="rounded-full border border-accent-amber/40 px-2 py-0.5 font-mono text-[10px] text-accent-amber"
+          className="rounded-full border border-accent-green/40 px-2 py-0.5 font-mono text-[10px] text-accent-green"
         >
           {causeTag}
         </motion.span>
