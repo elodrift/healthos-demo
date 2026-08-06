@@ -50,15 +50,20 @@ export function ChatStream() {
 
     /*
      * A beat's entrance animation grows its height AFTER this effect runs, so
-     * the scrollHeight we just used was short and the last line of a long reply
-     * stayed clipped below the fold. Re-pin instantly whenever the content
-     * actually resizes — the correction is a few dozen pixels, so "auto" reads
-     * as the tail of the original smooth scroll rather than a second movement.
+     * the scrollHeight measured above was short and the last line of a long
+     * reply stayed clipped below the fold. Re-pin once the animation has
+     * settled.
+     *
+     * Deliberately NOT a ResizeObserver: the callback would fire on the very
+     * layout change that `scrollTo` itself provokes, so observer -> scroll ->
+     * observer looped until React tore the tree down. A single bounded timeout
+     * fixes the clipping without being able to feed itself.
      */
-    const observer = new ResizeObserver(() => settle("auto"));
-    for (const child of Array.from(box.children)) observer.observe(child);
-    return () => observer.disconnect();
-  }, [revealedBeats.length, typing, pendingChoice]);
+    const repin = window.setTimeout(() => settle("auto"), 420);
+    return () => window.clearTimeout(repin);
+    // pendingChoice is an object rebuilt each render, so depend on its id —
+    // the object identity would re-run this effect on every single render.
+  }, [revealedBeats.length, typing, pendingChoice?.id]);
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
