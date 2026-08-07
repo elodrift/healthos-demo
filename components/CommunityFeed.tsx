@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { useState } from "react";
 import { usePlayerStore } from "@/lib/store";
 import { DishLearnMore } from "./DishLearnMore";
+import { CheckInMap } from "./CheckInMap";
 import {
   authorById,
   dishById,
@@ -143,15 +144,46 @@ function AteThisButton({ dish }: { dish: Dish }) {
 }
 
 export function CommunityFeed() {
+  /*
+   * Feed and map are two views of the same community, not two features, so they
+   * share this screen behind a segmented control rather than each claiming a
+   * bottom-nav slot. At 302px there is only room for one at a time.
+   */
+  const [view, setView] = useState<"feed" | "map">("feed");
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      <div className="border-b border-base-700 bg-base-900/80 px-4 py-3">
-        <p className="text-[13px] leading-relaxed text-ink-mid">
-          Every log here tightens the estimate for everyone. There is no like
-          button — the only thing you can do with a post is log it, and that
-          moves your own numbers.
-        </p>
+      <div className="sticky top-0 z-10 flex shrink-0 gap-1 border-b border-base-700 bg-base-900/95 px-2 py-1.5 backdrop-blur">
+        {(["feed", "map"] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => setView(v)}
+            aria-pressed={view === v}
+            className={`flex-1 rounded-full py-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider transition ${
+              view === v
+                ? "bg-base-700 text-ink-hi"
+                : "text-ink-lo hover:text-ink-mid"
+            }`}
+          >
+            {v === "feed" ? "Feed" : "Check-ins"}
+          </button>
+        ))}
       </div>
+
+      {view === "map" ? (
+        <div className="px-4 py-4">
+          <CheckInMap />
+        </div>
+      ) : (
+        <>
+          <div className="border-b border-base-700 bg-base-900/80 px-4 py-3">
+            <p className="text-[13px] leading-relaxed text-ink-mid">
+              Every log here tightens the estimate for everyone. There is no like
+              button — the only thing you can do with a post is log it, and that
+              moves your own numbers.
+            </p>
+          </div>
 
       {/* The board: which dishes most need logs. This is the part that makes
           contributing feel like it does something measurable. */}
@@ -265,12 +297,14 @@ export function CommunityFeed() {
         })}
       </ul>
 
-      <p className="px-4 py-5 text-[11px] leading-relaxed text-ink-lo">
-        Sample community data for the demo. The mechanic is real: estimate width
-        is a function of how many people logged the same dish, and dishes whose
-        variance is in your own portion are marked as such rather than being
-        quietly averaged.
-      </p>
+          <p className="px-4 py-5 text-[11px] leading-relaxed text-ink-lo">
+            Sample community data for the demo. The mechanic is real: estimate
+            width is a function of how many people logged the same dish, and
+            dishes whose variance is in your own portion are marked as such
+            rather than being quietly averaged.
+          </p>
+        </>
+      )}
     </div>
   );
 }

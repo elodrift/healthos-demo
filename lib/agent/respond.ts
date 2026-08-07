@@ -161,6 +161,89 @@ export function feedLogBeats(dish: Dish, s: AgentSnapshot): Beat[] {
   return beats;
 }
 
+/**
+ * The reply to joining a friend's planned check-in from the map (DNA Block 6).
+ *
+ * This deliberately emits NO FOOD_LOGGED event. Nothing has been eaten — the
+ * meal is tomorrow. Per DNA §4.12 the system proposes and the user disposes, so
+ * a join produces a plan and a proposal, never a silent entry in the log. The
+ * macro header must not move.
+ *
+ * The reason planned check-ins are worth building at all is visible here: a
+ * meal known in advance is no longer scenario S1 (plan breaks with zero notice,
+ * widest possible estimate). It can be prepared for — and if the dish trips a
+ * medical rule, the rule surfaces BEFORE the meal instead of scoring it after.
+ */
+export function planJoinBeats(
+  dish: Dish,
+  placeName: string,
+  when: string,
+  friendName: string,
+  s: AgentSnapshot,
+): Beat[] {
+  const t = s.time;
+  const venue = tightestVenue(dish);
+  const gain = venueGain(dish);
+
+  const beats: Beat[] = [
+    show(
+      {
+        type: "planned-variance",
+        tag: "PLANNED — NOT LOGGED",
+        headline: `${dish.name} · ${placeName} · ${when}`,
+        body: `Nothing logged — you have not eaten yet. But knowing this now is worth more than scoring it later: I can hold room for it instead of finding out from a photo afterwards.`,
+      },
+      t,
+    ),
+  ];
+
+  // The rule lands before the meal. This is the entire argument for planned
+  // check-ins over a history-only map.
+  const tripped = dish.trips;
+  if (tripped && RULE_COPY[tripped]) {
+    beats.push(
+      show(
+        {
+          type: "never-suspends",
+          tag: "NEVER SUSPENDS",
+          rules: [RULE_COPY[tripped].rule],
+          body: RULE_COPY[tripped].body,
+        },
+        t,
+      ),
+      say(
+        `Better to say this now than tomorrow night. ${friendName} going does not change the rule, and you have a day to decide what you want to do about it.`,
+        t,
+      ),
+    );
+  } else if (venue && gain) {
+    beats.push(
+      say(
+        `Useful that it is a fixed kitchen — logs from ${placeName} land ${gain}% tighter than the unnamed pile, so I can plan against a real range rather than a guess.`,
+        t,
+      ),
+    );
+  } else {
+    beats.push(say(dish.logTip, t));
+  }
+
+  beats.push(
+    say("Two ways I can set tomorrow up. Your call — I am not moving anything until you pick.", t),
+    show(
+      {
+        type: "proposals",
+        items: [
+          `Hold room for ${dish.name.toLowerCase()} and keep the rest of the day lighter`,
+          "Leave targets alone — decide at the table",
+        ],
+      },
+      t,
+    ),
+  );
+
+  return beats;
+}
+
 export function respond(intent: Intent, s: AgentSnapshot): Beat[] {
   const t = s.time;
 

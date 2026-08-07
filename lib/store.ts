@@ -12,8 +12,14 @@ import {
 import type { Beat, ScriptContext } from "./fixtures/script-types";
 import { dayClock } from "./fixtures/day-script";
 import { classify, HANDOFF_THRESHOLD } from "./agent/nlu";
-import { feedLogBeats, respond, userBeat, type AgentSnapshot } from "./agent/respond";
-import { dishById } from "./fixtures/community";
+import {
+  feedLogBeats,
+  planJoinBeats,
+  respond,
+  userBeat,
+  type AgentSnapshot,
+} from "./agent/respond";
+import { authorById, checkIns, dishById, placeById } from "./fixtures/community";
 
 export type Phase = "setup" | "day";
 export type Tab = "channel" | "engine";
@@ -43,6 +49,12 @@ type PlayerState = {
   phoneScreen: PhoneScreen;
   /** dishes logged from the feed this session, so the UI can show the effect */
   feedLogged: string[];
+  /**
+   * Planned check-ins the user has joined. Kept separate from feedLogged
+   * because a plan is explicitly not a log — conflating them is exactly the
+   * false-precision mistake the product refuses.
+   */
+  joinedPlans: string[];
   /** cross-highlight: the beat currently linked across chat <-> engine */
   highlightBeatId: string | null;
   timer: ReturnType<typeof setTimeout> | null;
@@ -70,6 +82,8 @@ type PlayerState = {
   setPhoneScreen: (s: PhoneScreen) => void;
   /** "I ate this too" — logs the community median as a real event */
   logFromFeed: (dishId: string) => Promise<void>;
+  /** joining a friend's planned check-in — records a plan, logs nothing */
+  joinPlan: (checkInId: string) => Promise<void>;
   setHighlight: (id: string | null) => void;
   sendMessage: (text: string) => Promise<void>;
   resume: () => void;
@@ -194,6 +208,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     activeTab: "channel",
     phoneScreen: "today",
     feedLogged: [],
+    joinedPlans: [],
     highlightBeatId: null,
     timer: null,
 
@@ -269,6 +284,46 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       }));
 
       await drip(feedLogBeats(dish, s));
+    },
+
+    /**
+     * Joining a friend's planned check-in from the map.
+     *
+     * Note what this does NOT do: no FOOD_LOGGED event, no feedLogged entry, no
+     * movement in the macro header. Nothing has been eaten — the meal is
+     * tomorrow. It records the plan and hands back a proposal, which is DNA
+     * §4.12 (system proposes, user disposes) applied to a future meal rather
+     * than a past one.
+     */
+    joinPlan: async (checkInId) => {
+      if (get().thinking) return;
+      const checkIn = checkIns.find((c) => c.id === checkInId);
+      if (!checkIn || checkIn.status !== "planned") return;
+
+      const dish = dishById(checkIn.dishId);
+      const place = placeById(checkIn.placeId);
+      const friend = authorById(checkIn.authorId);
+
+      clear();
+      const s = snapshot();
+      const t = s.time;
+
+      set((st) => ({
+        paused: true,
+        phoneScreen: "today",
+        activeTab: "channel",
+        joinedPlans: st.joinedPlans.includes(checkInId)
+          ? st.joinedPlans
+          : [...st.joinedPlans, checkInId],
+        liveBeats: [
+          ...st.liveBeats,
+          userBeat(`Joining ${friend.name} — ${dish.name.toLowerCase()}, ${checkIn.time}`, t),
+        ],
+        highlightBeatId: null,
+        lastReplySource: "matcher",
+      }));
+
+      await drip(planJoinBeats(dish, place.name, checkIn.time, friend.name, s));
     },
 
     setHighlight: (id) => set({ highlightBeatId: id }),
@@ -441,6 +496,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         paused: false,
         thinking: false,
         lastReplySource: null,
+        // These three were being left behind on reset, so a restarted demo
+        // opened with the previous visitor's community logs still counted and
+        // sometimes on the wrong phone screen.
+        phoneScreen: "today",
+        feedLogged: [],
+        joinedPlans: [],
       });
     },
   };
