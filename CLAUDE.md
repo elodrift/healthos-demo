@@ -345,6 +345,38 @@ pathname returns 404 rather than a signed URL.
 - `/live` now shows logged protein against the day's commitment
   (`components/live/logged-against-target.tsx`), reading `proposal.dayTarget`.
 
+### 5.0 WHOOP disconnect, and the promise the policy was making alone
+
+The privacy policy said "you can disconnect WHOOP at any time from inside the
+app". It was the **only** file in the repo containing the word "disconnect" —
+there was no route, no action, no button. A false promise, in the one document
+users are shown during OAuth consent and that WHOOP reviews. Fixed by building
+the disconnect, not by softening the sentence.
+
+`revokeWhoopAccess` calls `DELETE /v2/user/access` (WHOOP's own scheme, not
+RFC 7009; answers 204) *before* deleting the local row. Deleting our tokens alone
+would leave the grant live in the user's WHOOP account. It refreshes the token
+first, or a user returning a day later would silently fail to revoke remotely.
+
+The local delete proceeds **even when the remote revoke fails** — they asked us
+to stop holding their credentials, and keeping them because a network call failed
+is backwards. But the failure is *returned*, because "disconnected" and
+"disconnected here, still authorised at WHOOP" are different states and only the
+user can finish the second one.
+
+**The bug worth remembering:** the button was first rendered as
+`{conn ? <DisconnectButton/> : null}`. Disconnecting calls `revalidatePath`, the
+server re-renders with `conn === null`, the component unmounts, and the React
+state holding the result message is destroyed — so the user saw *no* confirmation,
+and the message that mattered most ("we could not confirm revocation, remove it
+in WHOOP's settings") was the one discarded. Any component that reports the
+outcome of an action which changes its own render condition must stay mounted:
+pass `connected` as a prop and check `result` **before** `connected`, since after
+success `connected` is false.
+
+Verified end to end with a deliberately invalid token to exercise the partial
+path: tokens deleted, revoke unconfirmed, instruction preserved on screen.
+
 ### 5.1 The macro columns were dead, and that was invisible
 
 `proteinTargetG`, `proteinFloorG`, `carbTargetG`, `kcalTarget` and `mealsPerDay`
