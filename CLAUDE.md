@@ -444,35 +444,7 @@ meal changes the header but not the next proposal. That is the next seam.
     | awk '{print $1}' | xargs -r kill -9
   ```
 
-### 6.1 A passing local build is not evidence the deploy will work
-
-Publishing failed while `npm run build` passed locally. Cause: `lib/auth.ts`
-deliberately throws when `BETTER_AUTH_SECRET` is missing and
-`NODE_ENV === "production"` (correctly — a silently defaulted auth secret would
-invalidate every session). The secret existed **only in `.env.local`**, which is
-gitignored, so it never left the sandbox. Next loads `.env.local` automatically,
-so the local build sailed through; Vercel had no such file and the build threw at
-import time.
-
-The general trap: **a gitignored local env file makes the local build a false
-positive for anything that fail-louds on a missing secret.** Local success and
-deploy success are testing different environments.
-
-To reproduce what Vercel actually does, temporarily move `.env.local` aside and
-build from the project-level env only:
-
-```bash
-mv .env.local /tmp/env.local.bak
-set -a && source /vercel/share/.env.project && set +a && NODE_ENV=production npm run build
-mv /tmp/env.local.bak .env.local
-```
-
-Vars that must exist at **project** level, not just locally: `BETTER_AUTH_SECRET`,
-`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`. The `WHOOP_*` vars are the deliberate
-exception — they are allowed to be absent and degrade to `NO_WHOOP_APP` rather
-than throwing, so they never block a build.
-
-  The second command must print nothing before you restart. Afterwards, confirm
+  The `ps` command must print nothing before you restart. Afterwards, confirm
   the server you *think* you are talking to is the one on 3000: read the dev
   log's `Local:` line, don't assume.
 - Do not try to fix a chunk problem by deleting `.next` — the sandbox forbids it.
@@ -523,3 +495,36 @@ than throwing, so they never block a build.
 - Test data goes in and comes back out. Verifying the food loop writes real rows
   to the real Neon database under your own account; delete them when you are done
   rather than leaving your dashboard showing meals you never ate.
+
+### 6.1 A passing local build is not evidence the deploy will work
+
+Publishing failed while `npm run build` passed locally. Cause: `lib/auth.ts`
+deliberately throws when `BETTER_AUTH_SECRET` is missing and
+`NODE_ENV === "production"` — correctly, since a silently defaulted auth secret
+would invalidate every session. But the secret existed **only in `.env.local`**,
+which is gitignored (`.gitignore:7`), so it never left the sandbox. Next loads
+`.env.local` automatically, so the local build sailed through; Vercel had no such
+file and the build threw at import time.
+
+The general trap: **a gitignored local env file makes the local build a false
+positive for anything that fail-louds on a missing secret.** Local success and
+deploy success are testing different environments, so the green local build is
+actively misleading rather than merely insufficient.
+
+To reproduce what Vercel actually does, move `.env.local` aside and build from the
+project-level env only:
+
+```bash
+mv .env.local /tmp/env.local.bak
+set -a && source /vercel/share/.env.project && set +a && NODE_ENV=production npm run build
+mv /tmp/env.local.bak .env.local   # do not forget this
+```
+
+Vars that must exist at **project** level, not just locally: `BETTER_AUTH_SECRET`,
+`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`. The `WHOOP_*` vars are the deliberate
+exception — they may be absent and degrade to `NO_WHOOP_APP` instead of throwing,
+so they never block a build.
+
+Two follow-on notes. Changing `BETTER_AUTH_SECRET` later signs out every existing
+user, so it is set once and left alone. And this build is what poisons `.next` for
+the dev server every time, so expect to run the §6 orphan-kill afterwards.
