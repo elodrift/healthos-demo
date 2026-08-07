@@ -270,6 +270,26 @@ a count rather than dropped silently.
   build, which is the only step that catches invalid route exports — see §2.7.
 - Verify UI changes at 302px before calling them done. A clean type-check is not
   evidence that anything works, and neither is a successful build.
+- **`agent-browser upload` does not work in this sandbox.** It reports success,
+  but the injected file has no readable backing store, so the subsequent
+  `fetch` dies with a bare `TypeError: Failed to fetch` that looks exactly like
+  a broken upload route. Diagnosed by elimination: the same file posted fine
+  from Node, and posting from page context returned a correct 415, so the route
+  was never at fault. To drive a file input for real, build the `File` in-page
+  and dispatch the change event — this exercises the true component path:
+
+  ```js
+  const buf = await (await fetch('/some-fixture.png')).arrayBuffer();
+  const dt = new DataTransfer();
+  dt.items.add(new File([buf], 'meal.png', { type: 'image/png' }));
+  const input = document.querySelector('#meal-photo-input');
+  input.files = dt.files;
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  ```
+
+  The fixture has to be reachable over HTTP, so stage it in `public/` and
+  delete it afterwards — it must not ship. `scripts/make-dirty-fixture.ts`
+  generates a photo carrying real EXIF/GPS for this purpose.
 - Fixture arithmetic is checked, not trusted — venue log counts sum to each dish
   total. Keep it that way; a demo arguing about uncertainty cannot afford
   arithmetic that does not hold.

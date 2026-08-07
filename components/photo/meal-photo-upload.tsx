@@ -158,9 +158,17 @@ export function MealPhotoUpload() {
                 </p>
               )}
             </dd>
+            {/*
+              Rounding both sides to kB rendered as "2141kB -> 2141kB", which
+              reads as though nothing happened and undercuts the whole receipt.
+              The removed metadata is what matters here, so state it directly
+              in bytes and give the stored size as context.
+            */}
             <dd className="mt-2 font-mono text-[11px] text-ink-lo">
-              {(state.photo.bytesBefore / 1000).toFixed(0)}kB &rarr;{" "}
-              {(state.photo.bytesAfter / 1000).toFixed(0)}kB stored
+              {state.photo.bytesBefore > state.photo.bytesAfter
+                ? `${(state.photo.bytesBefore - state.photo.bytesAfter).toLocaleString()} bytes removed · `
+                : ""}
+              {(state.photo.bytesAfter / 1_000_000).toFixed(1)}MB stored
             </dd>
           </dl>
 
