@@ -55,6 +55,15 @@ type PlayerState = {
    * false-precision mistake the product refuses.
    */
   joinedPlans: string[];
+  /**
+   * Which proposal the user actually chose, keyed by the beat that offered it.
+   *
+   * The agent's whole posture is "I am not moving anything until you pick"
+   * (DNA §4.12, system proposes / user disposes) — but until now the proposals
+   * card was a read-only list, so there was nothing to pick with. The promise
+   * was made and then not honoured. This is the disposal half.
+   */
+  chosenProposals: Record<string, number>;
   /** cross-highlight: the beat currently linked across chat <-> engine */
   highlightBeatId: string | null;
   timer: ReturnType<typeof setTimeout> | null;
@@ -84,6 +93,8 @@ type PlayerState = {
   logFromFeed: (dishId: string) => Promise<void>;
   /** joining a friend's planned check-in — records a plan, logs nothing */
   joinPlan: (checkInId: string) => Promise<void>;
+  /** committing to one of the agent's proposals — the "user disposes" half */
+  chooseProposal: (beatId: string, index: number) => void;
   setHighlight: (id: string | null) => void;
   sendMessage: (text: string) => Promise<void>;
   resume: () => void;
@@ -325,6 +336,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
       await drip(planJoinBeats(dish, place.name, checkIn.time, friend.name, s));
     },
+
+    /**
+     * Commit to one proposal.
+     *
+     * Deliberately emits no DemoEvent and moves no macro: choosing "hold room
+     * for dinner" is a decision about intent, not a claim that food was eaten.
+     * The receipt in the card is the whole point — the user gets told what they
+     * committed to, and it is the one thing on screen that is theirs.
+     */
+    chooseProposal: (beatId, index) =>
+      set((st) => ({
+        chosenProposals: { ...st.chosenProposals, [beatId]: index },
+      })),
 
     setHighlight: (id) => set({ highlightBeatId: id }),
 
