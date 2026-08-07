@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { buildLiveDay } from "@/lib/live/build-day";
 import { DayProposalView } from "@/components/live/day-proposal";
+import { DecisionTrace } from "@/components/live/decision-trace";
 import { LoggedAgainstTarget } from "@/components/live/logged-against-target";
 
 export const metadata: Metadata = {
@@ -91,6 +92,12 @@ export default async function LivePage() {
             fromCache={result.fromCache}
             cachedDay={result.cachedDay}
           />
+          {/*
+            Placed after the plan, not before it. The trace explains a schedule
+            the reader has already seen; leading with the reasoning would ask them
+            to follow an argument about something they cannot yet picture.
+          */}
+          <DecisionTrace trace={result.proposal.trace} />
         </>
       ) : (
         <BlockedState result={result} />

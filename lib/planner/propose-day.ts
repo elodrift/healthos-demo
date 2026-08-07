@@ -107,6 +107,12 @@ export type DayProposal = {
   /** Human-readable reasons, so the proposal can be argued with. */
   rationale: string[];
   evidence: Evidence;
+  /**
+   * Ordered links from input to consequence, one per decision the planner made.
+   * Empty is not possible in practice — control level always contributes one —
+   * so an empty trace means the planner did not run.
+   */
+  trace: DecisionTraceEntry[];
   controlLevel: ControlLevel;
   /** Things the planner deliberately refused to decide. */
   deferrals: string[];
@@ -147,6 +153,87 @@ function timeOr(value: string | null | undefined, fallback: Minutes): Minutes {
   const parsed = parseTime(value);
   return parsed === null ? fallback : parsed;
 }
+
+/* ----------------------------------------------------------------- trace --- */
+
+/**
+ * One link in the chain from a wearable reading to a change in the plan.
+ *
+ * This exists because `rationale` is prose: it reads well but cannot be checked.
+ * A trace entry is structured, so a test can assert that a decision claiming to
+ * rest on a recovery score actually had one — and so the UI can show the link
+ * instead of asking the user to trust it.
+ *
+ * `basis` is the point of the whole type. `MEASURED` means a real reading drove
+ * this; `ASSUMED` means a default filled a gap. Collapsing those two into one
+ * confident sentence is the failure §4.11 names, and it is invisible in prose.
+ */
+export type DecisionTraceEntry = {
+  input:
+    | "WHOOP_WAKE"
+    | "WHOOP_RECOVERY"
+    | "PROFILE_CONTROL"
+    | "PROFILE_TRAINING"
+    | "PROFILE_GOAL";
+  /** Short label for the input, for display. */
+  label: string;
+  /** The reading as shown, or null when there was nothing to read. */
+  reading: string | null;
+  /** What actually changed in the plan because of it. */
+  effect: string;
+  basis: "MEASURED" | "ASSUMED";
+};
+
+/**
+ * WHOOP fields that are fetched and stored but drive no planning decision.
+ *
+ * Kept as data rather than a comment so the UI can state it outright. Every one
+ * of these is on `wearable_daily` and on `WearableSignal`, and `proposeDay`
+ * reads none of them — verified by `scripts/test-whoop-trace.ts`, which fails if
+ * any becomes load-bearing without moving off this list.
+ *
+ * Surfacing this is the honest answer to "what does my WHOOP data do here?". A
+ * panel that showed strain and HRV beside the plan would imply they shaped it;
+ * they do not. Sleep duration is the subtle case — it moves the evidence badge
+ * but changes no time and no target, so it is listed with that exact caveat
+ * rather than as an input.
+ */
+export const UNUSED_WEARABLE_SIGNALS: ReadonlyArray<{
+  field: string;
+  label: string;
+  why: string;
+}> = [
+  {
+    field: "strain",
+    label: "Day strain",
+    why: "Stored, but no rule maps strain onto meal timing or macros yet.",
+  },
+  {
+    field: "hrvMs",
+    label: "HRV",
+    why: "Stored. It already feeds WHOOP's own recovery score, which is what this plan reads.",
+  },
+  {
+    field: "restingHr",
+    label: "Resting HR",
+    why: "Stored, and likewise folded into recovery rather than read directly.",
+  },
+  {
+    field: "sleepPerformance",
+    label: "Sleep performance",
+    why: "Stored, but bedtime moves on recovery, not on this percentage.",
+  },
+  {
+    field: "kcalBurned",
+    label: "Calories burned",
+    why: "Stored. Spending it against intake needs a founder decision on deficit handling (DNA §8).",
+  },
+  {
+    field: "sleepDurationMin",
+    label: "Sleep duration",
+    why: "Raises how much of this plan counts as measured, but shifts no time and no target.",
+  },
+];
 
 /* -------------------------------------------------------------- evidence --- */
 
@@ -205,6 +292,9 @@ export function proposeDay(args: {
   const { signal, profile, training } = args;
   const rationale: string[] = [];
   const deferrals: string[] = [];
+  // Built alongside `rationale` at each decision point, from the same branch, so
+  // the structured trace and the prose cannot drift apart.
+  const trace: DecisionTraceEntry[] = [];
   const evidence = assessEvidence(signal);
   const control = profile.controlLevel;
 
@@ -220,6 +310,13 @@ export function proposeDay(args: {
   if (signal.wakeTime && parseTime(signal.wakeTime) !== null) {
     wakeMins = parseTime(signal.wakeTime) as Minutes;
     rationale.push(`WHOOP recorded you woke at ${formatTime(wakeMins)}.`);
+    trace.push({
+      input: "WHOOP_WAKE",
+      label: "Wake time",
+      reading: formatTime(wakeMins),
+      effect: `First meal set to ${formatTime(roundToQuarter(wakeMins + 60))}, an hour after waking.`,
+      basis: "MEASURED",
+    });
   } else {
     wakeMins = timeOr(
       profile.typicalWakeTime,
@@ -230,6 +327,15 @@ export function proposeDay(args: {
         ? `No wake time from WHOOP today, so this uses your usual ${formatTime(wakeMins)}.`
         : `No wake data and no usual wake time on file, so this assumes ${formatTime(wakeMins)}. Correct it and the day re-plans.`,
     );
+    trace.push({
+      input: "WHOOP_WAKE",
+      label: "Wake time",
+      reading: null,
+      effect: profile.typicalWakeTime
+        ? `Fell back to your usual ${formatTime(wakeMins)}, so meal times come from your profile rather than today.`
+        : `No reading and none on file, so ${formatTime(wakeMins)} is a placeholder the whole schedule inherits.`,
+      basis: "ASSUMED",
+    });
   }
 
   /* --- sleep target: driven by recovery, but only when measured ---------- */
@@ -243,14 +349,50 @@ export function proposeDay(args: {
     rationale.push(
       `Recovery is ${signal.recoveryScore}%, so bedtime moves 45 minutes earlier.`,
     );
+    trace.push({
+      input: "WHOOP_RECOVERY",
+      label: "Recovery",
+      reading: `${signal.recoveryScore}%`,
+      effect: `Below 34%, so bedtime moved 45 minutes earlier to ${formatTime(sleepMins)} — which also pulls the last meal earlier.`,
+      basis: "MEASURED",
+    });
   } else if (signal.recoveryScore !== null && signal.recoveryScore >= 67) {
     rationale.push(
       `Recovery is ${signal.recoveryScore}%, so your usual bedtime holds.`,
     );
+    trace.push({
+      input: "WHOOP_RECOVERY",
+      label: "Recovery",
+      reading: `${signal.recoveryScore}%`,
+      effect: `67% or above, so your usual ${formatTime(sleepMins)} bedtime holds unchanged.`,
+      basis: "MEASURED",
+    });
   } else if (signal.recoveryScore === null) {
     rationale.push(
       "No recovery score today, so bedtime is your usual rather than an inferred one.",
     );
+    trace.push({
+      input: "WHOOP_RECOVERY",
+      label: "Recovery",
+      reading: null,
+      effect: `Nothing to read, so bedtime stays at your usual ${formatTime(sleepMins)} rather than being inferred.`,
+      basis: "ASSUMED",
+    });
+  } else {
+    /*
+     * The 34–66 middle band. It previously produced no rationale line at all,
+     * which made a measured score look like a missing one: the panel showed
+     * recovery driving nothing, when in fact it was read and deliberately left
+     * the day alone. An unexplained absence is indistinguishable from an
+     * oversight, so the band now states itself.
+     */
+    trace.push({
+      input: "WHOOP_RECOVERY",
+      label: "Recovery",
+      reading: `${signal.recoveryScore}%`,
+      effect: `In the middle band (34–66%), which neither pulls bedtime earlier nor confirms your usual one, so ${formatTime(sleepMins)} stands.`,
+      basis: "MEASURED",
+    });
   }
 
   /* --- meal slots ------------------------------------------------------- */
@@ -264,6 +406,23 @@ export function proposeDay(args: {
         : `Your control over food today is ${control.toLowerCase()}, so this plan defends your protein floor instead of prescribing exact macros.`,
     );
   }
+
+  /*
+   * Control level is listed as ASSUMED when UNKNOWN and MEASURED otherwise,
+   * because it is self-reported at onboarding rather than sensed. Calling a
+   * stated answer "measured" would stretch the word, but it is a real answer
+   * from the user, so it is not an assumption either — UNKNOWN is the only case
+   * where the system is genuinely filling a gap on its own.
+   */
+  trace.push({
+    input: "PROFILE_CONTROL",
+    label: "Food control",
+    reading: control === "UNKNOWN" ? null : control.toLowerCase(),
+    effect: precise
+      ? `Full control, so slots carry gram-level protein, carb and calorie targets across ${count} meals.`
+      : `${count} meal${count === 1 ? "" : "s"} with a protein floor and one decision each, instead of gram targets this day cannot honour.`,
+    basis: control === "UNKNOWN" ? "ASSUMED" : "MEASURED",
+  });
 
   const trainStart = training?.start ? parseTime(training.start) : null;
   const trainEnd = training?.end ? parseTime(training.end) : null;
@@ -323,6 +482,19 @@ export function proposeDay(args: {
     rationale.push(
       `Meals are arranged around your ${training?.type ?? "training"} at ${training?.start}.`,
     );
+    const relabelled = slots.filter(
+      (s) => s.label === "Pre-training" || s.label === "Post-training",
+    ).length;
+    trace.push({
+      input: "PROFILE_TRAINING",
+      label: "Training window",
+      reading: `${training?.type ?? "training"} at ${training?.start}`,
+      effect:
+        relabelled > 0
+          ? `${relabelled} slot${relabelled === 1 ? "" : "s"} repurposed around the session — carbs before, protein and carbs after.`
+          : "Session noted, though no meal slot falls close enough to it to be repurposed.",
+      basis: "MEASURED",
+    });
   }
 
   /* --- §4.12: this is a proposal about the user's own day ---------------- */
@@ -355,5 +527,6 @@ export function proposeDay(args: {
     evidence,
     controlLevel: control,
     deferrals,
+    trace,
   };
 }

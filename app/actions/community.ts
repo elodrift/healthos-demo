@@ -280,11 +280,31 @@ export async function requestFriend(
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   if (!email) return { error: "An email is needed." };
 
+  /*
+   * Deliberately identical whether or not the address belongs to a real account.
+   * Saying "no such user" would turn this box into an email-enumeration oracle
+   * for a health product, where merely confirming that someone has an account is
+   * itself a disclosure.
+   */
   const sent = { ok: "Request sent. They will see it next time they open HealthOS." };
 
   const target = await db.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1);
   const targetId = target[0]?.id;
-  if (!targetId || targetId === userId) return sent;
+
+  /*
+   * A self-request gets a real error, not `sent`.
+   *
+   * These two cases were originally one branch, which meant typing your own
+   * address returned "Request sent." while the action correctly wrote nothing —
+   * the UI stating as fact something that had not happened. Browser testing
+   * caught it; the database was right and the message was wrong.
+   *
+   * The enumeration argument does not apply here: the caller obviously knows
+   * their own address already, so naming this case reveals nothing they could
+   * not already confirm.
+   */
+  if (targetId === userId) return { error: "That is your own account." };
+  if (!targetId) return sent;
 
   // The unique index on (LEAST, GREATEST) makes A→B and B→A the same pair, so a
   // duplicate request is a no-op rather than a second row or a 500.
