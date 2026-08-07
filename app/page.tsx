@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { DemoFooter } from "@/components/DemoFooter";
+import { Disclaimer } from "@/components/Disclaimer";
 
 const strip = [
   {
@@ -40,7 +40,7 @@ export default function LandingPage() {
 
         <section className="flex flex-1 flex-col justify-center py-14">
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent-green">
-            One day with HealthOS
+            Built on your own data
           </span>
           <h1 className="mt-4 max-w-2xl text-pretty text-[34px] font-semibold leading-[1.1] tracking-tight text-ink-hi sm:text-5xl">
             Your health, orchestrated. All day. Every day.
@@ -51,13 +51,13 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
-              href="/day"
+              href="/sign-in"
               className="rounded-full bg-accent-green px-7 py-3.5 text-[15px] font-semibold text-base-950 transition hover:brightness-110"
             >
-              Play one day
+              Get started
             </Link>
             <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-lo">
-              ~3 minutes · no signup
+              Connect WHOOP · your data stays yours
             </span>
           </div>
         </section>
@@ -76,7 +76,7 @@ export default function LandingPage() {
           </div>
         </section>
       </div>
-      <DemoFooter />
+      <Disclaimer />
     </main>
   );
 }

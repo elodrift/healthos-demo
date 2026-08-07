@@ -15,8 +15,10 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * Live mode. Separate from the scripted /day replay by design — DEMO_SPEC's
- * pitch path must keep working without a login, so nothing here touches it.
+ * Live mode — the only day view. The scripted /day replay it was once kept
+ * separate from has been deleted, because a fixture-driven walkthrough sitting
+ * beside real output is exactly the kind of thing someone mistakes for their
+ * own data.
  */
 export default async function LivePage() {
   const session = await auth.api.getSession({ headers: headers() });
@@ -124,13 +126,6 @@ function BlockedState({
           {state.cta}
         </Link>
       ) : null}
-      <p className="mt-4 border-t border-base-800 pt-4 text-[13px] leading-relaxed text-ink-lo">
-        The scripted walkthrough still works without any of this.{" "}
-        <Link href="/day" className="text-accent-green underline underline-offset-4">
-          Open the demo
-        </Link>
-        .
-      </p>
     </section>
   );
 }

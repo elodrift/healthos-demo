@@ -174,10 +174,10 @@ export default async function OnboardingPage() {
           Signed in as {session.user.email}
         </p>
         <Link
-          href="/day"
+          href="/live"
           className="text-[13px] font-medium text-accent-green underline decoration-accent-green/40 underline-offset-2"
         >
-          Skip to the scripted demo
+          Open today&apos;s plan
         </Link>
       </div>
     </main>
