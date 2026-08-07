@@ -10,6 +10,8 @@ type Props = {
     goalMode: string;
     controlLevel: string;
     targetDate: string;
+    proteinTargetG: string;
+    proteinFloorG: string;
   };
 };
 
@@ -151,6 +153,64 @@ export default function GoalForm({ initial }: Props) {
             </span>
           </label>
         ))}
+      </fieldset>
+
+      {/*
+        Typed, not derived. The app could estimate protein from bodyweight, but
+        that would make the number the app's inference presented as the user's
+        commitment — and every target on /live is supposed to be traceable to
+        something the user actually said. Blank stays blank.
+      */}
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">
+          Daily protein <span className="normal-case tracking-normal">(optional)</span>
+        </legend>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="proteinTargetG" className="text-[13px] font-medium text-ink-hi">
+            Target
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="proteinTargetG"
+              name="proteinTargetG"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              defaultValue={initial.proteinTargetG}
+              placeholder="160"
+              aria-describedby="protein-hint"
+              className="min-h-[44px] w-full rounded-lg border border-base-700 bg-base-900 px-3 text-[15px] text-ink-hi placeholder:text-ink-lo/60 outline-none transition-colors focus:border-accent-green/60"
+            />
+            <span className="font-mono text-[13px] text-ink-lo">g</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="proteinFloorG" className="text-[13px] font-medium text-ink-hi">
+            Floor
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="proteinFloorG"
+              name="proteinFloorG"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              defaultValue={initial.proteinFloorG}
+              placeholder="120"
+              aria-describedby="protein-hint"
+              className="min-h-[44px] w-full rounded-lg border border-base-700 bg-base-900 px-3 text-[15px] text-ink-hi placeholder:text-ink-lo/60 outline-none transition-colors focus:border-accent-green/60"
+            />
+            <span className="font-mono text-[13px] text-ink-lo">g</span>
+          </div>
+        </div>
+
+        <p id="protein-hint" className="text-[12px] leading-relaxed text-ink-mid">
+          Leave these blank and the day shows a running total instead of progress — nothing is
+          assumed on your behalf. The floor is what gets defended on days you don&apos;t control
+          your food.
+        </p>
       </fieldset>
 
       <div className="flex flex-col gap-1.5">

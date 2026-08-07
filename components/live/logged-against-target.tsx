@@ -61,7 +61,6 @@ export function LoggedAgainstTarget({ dayTarget }: { dayTarget: DayTarget }) {
   }
 
   const logged = Math.round(data.meals.reduce((n, m) => n + (m.proteinG ?? 0), 0));
-  const anyLow = data.meals.some((m) => m.confidence === "LOW");
 
   /*
     No protein figure in the plan. The logged total is still real, so it is shown

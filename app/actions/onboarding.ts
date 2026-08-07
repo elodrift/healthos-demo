@@ -74,11 +74,55 @@ export async function saveGoalContract(
     targetDate = targetDateRaw;
   }
 
+  /*
+    Protein target and floor. Both optional: the planner and /live are built to
+    say "no target set" rather than invent one, so a blank field must stay null
+    instead of becoming a default. A silent default here would be the exact
+    §4.11 failure — the app presenting its own guess as the user's intent.
+
+    Bounds are sanity rails, not advice. 20g is below any plausible daily intake
+    and 400g is past the top of the sports-nutrition range, so a number outside
+    them is far more likely a typo (1600 for 160) than a real goal. Rejecting is
+    right: a mistyped target silently reshapes every plan that follows.
+  */
+  function parseGrams(field: string): number | null | { error: string } {
+    const raw = String(formData.get(field) ?? "").trim();
+    if (!raw) return null;
+    if (!/^\d{1,4}$/.test(raw)) return { error: "Enter protein in whole grams." };
+    const n = Number(raw);
+    if (n < 20 || n > 400) {
+      return { error: "Protein should be between 20g and 400g a day." };
+    }
+    return n;
+  }
+
+  const targetParsed = parseGrams("proteinTargetG");
+  if (targetParsed !== null && typeof targetParsed === "object") return targetParsed;
+  const floorParsed = parseGrams("proteinFloorG");
+  if (floorParsed !== null && typeof floorParsed === "object") return floorParsed;
+
+  const proteinTargetG = targetParsed;
+  const proteinFloorG = floorParsed;
+
+  // A floor above the target is contradictory: the floor exists as the reduced
+  // commitment for low-control days, so this is almost always the two swapped.
+  if (proteinTargetG !== null && proteinFloorG !== null && proteinFloorG > proteinTargetG) {
+    return { error: "The floor can't be higher than the target." };
+  }
+
+  // A floor with no target has nothing to be a floor of, and /live would label
+  // it FLOOR while comparing against it as the only figure available.
+  if (proteinFloorG !== null && proteinTargetG === null) {
+    return { error: "Set a protein target before setting a floor." };
+  }
+
   const values = {
     objective,
     goalMode,
     controlLevel,
     targetDate,
+    proteinTargetG,
+    proteinFloorG,
     updatedAt: new Date(),
   };
 

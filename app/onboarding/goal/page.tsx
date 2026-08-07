@@ -51,6 +51,10 @@ export default async function GoalPage() {
           goalMode: p?.goalMode ?? "",
           controlLevel: p?.controlLevel ?? "",
           targetDate: p?.targetDate ?? "",
+          // Empty string, not "0" — a saved null must come back as a blank
+          // field, since 0 would present itself as a real target of zero.
+          proteinTargetG: p?.proteinTargetG != null ? String(p.proteinTargetG) : "",
+          proteinFloorG: p?.proteinFloorG != null ? String(p.proteinFloorG) : "",
         }}
       />
     </main>
