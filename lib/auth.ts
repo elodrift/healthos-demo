@@ -23,6 +23,13 @@ if (!secret && process.env.NODE_ENV === "production") {
 export const auth = betterAuth({
   database: pool,
   secret,
+  // Resolved at module load. At BUILD time none of these exist, so `next build`
+  // logs "Base URL is not set" — that warning is build-time only and harmless,
+  // because VERCEL_URL and VERCEL_PROJECT_PRODUCTION_URL are injected at
+  // RUNTIME on Vercel. Order matters: the production URL is stable, while
+  // VERCEL_URL changes on every deployment, so it is only a fallback for
+  // preview deployments. WHOOP's registered redirect URI must be the stable
+  // origin; set BETTER_AUTH_URL explicitly once a custom domain is attached.
   baseURL:
     process.env.BETTER_AUTH_URL ??
     (process.env.VERCEL_PROJECT_PRODUCTION_URL

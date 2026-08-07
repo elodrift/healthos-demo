@@ -139,6 +139,49 @@ Two related constraints in the same file, both load-bearing:
 This project is Next **14.2**, so `headers()` and `cookies()` are synchronous.
 The Neon skill's examples are Next 16 and `await` them; do not copy that here.
 
+### 2.7 `tsc` is not the build — but the build fights the dev server
+
+Two failures got past a clean `tsc --noEmit` and only appeared in `next build`:
+
+1. **Route files may only export a fixed set of fields.** Exporting a shared
+   constant from `app/api/whoop/connect/route.ts` failed the build with
+   `"WHOOP_STATE_COOKIE" is not a valid Route export field`. Shared values go in
+   a plain module — hence `lib/whoop/oauth-state.ts`. The original version also
+   imported it from the *other route module*, dragging one route's graph into
+   another; the shared module fixes both problems at once.
+2. **An empty directory under `app/` breaks the build.** After deleting a
+   scratch page, the leftover empty folder made page-data collection fall back
+   to the pages router and die with `Cannot find module for page: /_document`.
+   Git does not track empty directories, so this never reaches origin and is
+   invisible in `git status` — it only wedges the local build. Check with
+   `find app -type d -empty`.
+
+So the build is the only thing that validates route exports — **and** §6 says
+never to run it against a live dev server. Both are true, which is why there are
+two scripts:
+
+- `npm run verify` — typecheck plus the three test suites. Safe at any time.
+- `npm run verify:build` — the above plus `next build`. **Stop the dev server
+  first, and restart it afterwards.** Running it against a live dev server
+  produces exactly the §6 symptom: pages still answer 200 while
+  `/_next/static/chunks/main-app.js` answers 500, so nothing hydrates and every
+  button is silently dead. Confirmed by doing it, then measuring both.
+
+Two more things about `tsc` here:
+
+- **`next build` rewrites `tsconfig.json`** on every run, re-adding
+  `.next/types/**/*.ts` to `include`, so excluding `.next` there is always
+  undone. `typecheck` uses `tsconfig.typecheck.json`, which Next leaves alone.
+  Next never prunes the generated type file for a deleted route, so without
+  that exclusion a removed page leaves a permanent phantom TS2307.
+- Expect `[Better Auth]: Base URL is not set` during `next build`. It is
+  build-time only and harmless: `VERCEL_URL` and
+  `VERCEL_PROJECT_PRODUCTION_URL` are injected at runtime, not build time. Do
+  not "fix" it by hardcoding an origin — see the `baseURL` comment in
+  `lib/auth.ts` for why the stable production URL must win over the
+  per-deployment one, which matters because WHOOP's redirect URI is registered
+  once.
+
 ## 3. Product rules that constrain code, not just copy
 
 These come from the DNA. They are listed here because each one has a concrete
@@ -216,10 +259,17 @@ a count rather than dropped silently.
 ## 6. Working practice
 
 - `npm run dev` — do **not** run `npm run build` against a running dev server.
-  It overwrites the dev client chunks, `main-app.js` starts 404ing, and the app
-  silently stops hydrating: buttons do nothing and the cause is invisible.
+  It overwrites the dev client chunks, `main-app.js` starts 404ing (or 500ing),
+  and the app silently stops hydrating: buttons do nothing and the cause is
+  invisible. If you must build, stop dev first and restart it after. To check
+  for the damage: `curl -o /dev/null -w '%{http_code}'
+  http://localhost:3000/_next/static/chunks/main-app.js` — a 200 page with a
+  non-200 `main-app.js` is this bug.
+- `npm run verify` before every commit (typecheck + planner, metadata and
+  live-day suites). `npm run verify:build` additionally runs the production
+  build, which is the only step that catches invalid route exports — see §2.7.
 - Verify UI changes at 302px before calling them done. A clean type-check is not
-  evidence that anything works.
+  evidence that anything works, and neither is a successful build.
 - Fixture arithmetic is checked, not trusted — venue log counts sum to each dish
   total. Keep it that way; a demo arguing about uncertainty cannot afford
   arithmetic that does not hold.

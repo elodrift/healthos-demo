@@ -10,7 +10,7 @@ import {
   fetchProfile,
   saveWhoopTokens,
 } from "@/lib/whoop/client";
-import { WHOOP_STATE_COOKIE } from "../connect/route";
+import { WHOOP_STATE_COOKIE } from "@/lib/whoop/oauth-state";
 
 export const dynamic = "force-dynamic";
 

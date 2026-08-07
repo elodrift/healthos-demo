@@ -3,10 +3,9 @@ import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { WhoopAuthError, whoopAuthorizeUrl } from "@/lib/whoop/client";
+import { WHOOP_STATE_COOKIE } from "@/lib/whoop/oauth-state";
 
 export const dynamic = "force-dynamic";
-
-export const WHOOP_STATE_COOKIE = "whoop_oauth_state";
 
 /**
  * Start the WHOOP OAuth flow.

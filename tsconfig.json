@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -13,12 +17,25 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
-    "plugins": [{ "name": "next" }],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
-  "//": "`.next` is excluded on purpose. Next generates a per-route type file under .next/types but never prunes it when a route is deleted, so a removed page leaves a permanent phantom TS2307 that no source change can fix. `npm run typecheck` must describe the source tree, not stale build output; `next build` still validates routes itself.",
-  "exclude": ["node_modules", ".next"]
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "//": "Left exactly as `next build` wants it: Next rewrites this file on every build and re-adds '.next/types/**/*.ts', so any exclusion of .next here is silently undone. `npm run typecheck` uses tsconfig.typecheck.json instead, which Next does not touch.",
+  "exclude": [
+    "node_modules"
+  ]
 }
