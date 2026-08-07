@@ -386,6 +386,36 @@ meal changes the header but not the next proposal. That is the next seam.
   for the damage: `curl -o /dev/null -w '%{http_code}'
   http://localhost:3000/_next/static/chunks/main-app.js` — a 200 page with a
   non-200 `main-app.js` is this bug.
+- **`pkill -f "next dev"` does not reliably kill it here, and fails silently.**
+  This turns the advice above into a trap: you "stop" dev, build, start dev
+  again, and the new server finds port 3000 taken, prints `Port 3000 is in use,
+  trying 3001` into a log you are not reading, and settles on 3002. Port 3000 is
+  still answering — from the *orphaned* server holding the stale post-build
+  chunks — so the app looks up but nothing hydrates, and the port the preview
+  actually uses is not the port your new server is on. Three servers had stacked
+  up this way before it was noticed.
+
+  Kill by port and verify, rather than trusting `pkill`:
+
+  ```bash
+  lsof -ti:3000,3001,3002        # then kill -9 the pids
+  ps -eo pid,args | grep -E "next dev|next-server" | grep -v grep
+  ```
+
+  The second command must print nothing before you restart. Afterwards, confirm
+  the server you *think* you are talking to is the one on 3000: read the dev
+  log's `Local:` line, don't assume.
+- Do not try to fix a chunk problem by deleting `.next` — the sandbox forbids it.
+  Killing the orphaned servers is the actual fix, because the stale chunks are
+  being served by a stale process, not merely sitting on disk.
+- Ignore `Invalid next.config.mjs options detected` naming `devIndicators`,
+  `transitionIndicator` or `turbopackFileSystemCacheForDev`. Those keys are not in
+  this repo's config (which sets only `reactStrictMode`) — the v0 sandbox injects
+  them, and they are Next 15/16 options that **14.2.35** rejects. Nothing to fix
+  here; editing `next.config.mjs` will not silence it.
+- This project is on **Next 14.2.35** (App Router), not 15 or 16. So `params`,
+  `searchParams`, `cookies()` and `headers()` are still *synchronous* here. Do not
+  "modernise" them to awaited calls based on newer docs.
 - `npm run verify` before every commit (typecheck + planner, metadata and
   live-day suites). `npm run verify:build` additionally runs the production
   build, which is the only step that catches invalid route exports — see §2.7.
