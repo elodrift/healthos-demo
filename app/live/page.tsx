@@ -39,12 +39,20 @@ export default async function LivePage() {
           </span>
           <span className="text-[15px] font-semibold tracking-tight">HealthOS</span>
         </Link>
-        <Link
-          href="/onboarding"
-          className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4"
-        >
-          Setup
-        </Link>
+        <nav className="flex items-center gap-4">
+          <Link
+            href="/chat"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
+          >
+            Chat
+          </Link>
+          <Link
+            href="/onboarding"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
+          >
+            Setup
+          </Link>
+        </nav>
       </header>
 
       <div>

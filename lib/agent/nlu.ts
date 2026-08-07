@@ -358,13 +358,55 @@ export function classify(raw: string): Intent {
     "should i avoid",
     "allowed to",
   ]);
+  /*
+   * Medical *vocabulary*, independent of phrasing.
+   *
+   * Added because `scripts/test-agent.ts` found a real hole: the checks above key
+   * on asking-permission phrasing, so "does red meat affect my uric acid" and
+   * "is this ok with my medication" matched nothing and fell through to the
+   * model. A question about a drug interaction answered by an LLM in this
+   * product's authoritative voice is exactly what DNA principle 12 forbids, and
+   * phrasing is the wrong thing to gate safety on — a user asks about their
+   * medication however they like.
+   *
+   * So any mention of medication, a named drug class, or a clinical marker claims
+   * the turn regardless of sentence shape. This over-triggers by design: the cost
+   * of wrongly deferring a harmless question is one unnecessary "ask your
+   * pharmacist", while the cost of missing one is a fabricated medical claim.
+   */
+  const medicalVocab = any(text, [
+    "medication",
+    "medications",
+    "meds",
+    "my prescription",
+    "prescribed",
+    "statin",
+    "amlodipine",
+    "metformin",
+    "warfarin",
+    "beta blocker",
+    "blood thinner",
+    "blood pressure med",
+    "uric acid",
+    "gout",
+    "cholesterol",
+    "blood sugar",
+    "insulin",
+    "kidney",
+    "liver",
+    "thyroid",
+    "interact",
+    "interaction",
+    "contraindicat",
+  ]);
+
   const food = findFood(text);
-  if (askingPermission || (food?.trips && !any(text, ATE_VERBS))) {
+  if (askingPermission || medicalVocab || (food?.trips && !any(text, ATE_VERBS))) {
     return {
       kind: "medical_check",
       score: 1,
       food: food ? toGuess(food) : undefined,
-      matched: askingPermission ?? food?.label,
+      matched: askingPermission ?? medicalVocab ?? food?.label,
     };
   }
 
