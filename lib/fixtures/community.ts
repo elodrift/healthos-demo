@@ -13,6 +13,23 @@
  * how many plates YOU took, and no amount of other people's logs will ever tell
  * us that. So each dish carries whether its uncertainty is reducible, and the
  * dish page says so plainly instead of implying more data always helps.
+ *
+ * ---------------------------------------------------------------------------
+ * [ASSUMPTION] EVERY NUMBER AND NAME IN THIS FILE IS INVENTED FOR THE DEMO.
+ *
+ * Per DEMO_SPEC §4, no fixture value may be authored by the agent without being
+ * marked. That applies to all of it: log counts, kcal/protein medians and
+ * ranges, confidence tiers, streak counts, place names, coordinates, check-in
+ * times, and every caption. None of it is sourced from real nutrition data,
+ * and no place named here is a real business — the names are deliberately
+ * descriptive ("Wok stall — north lane") rather than real restaurants, so the
+ * demo never makes a factual-looking claim about somewhere that exists.
+ *
+ * The numbers are authored to be internally consistent (venue log counts sum to
+ * each dish total, ranges bracket their medians) because the demo argues about
+ * uncertainty and would undercut itself with arithmetic that does not hold.
+ * Consistent is not the same as real. Do not cite any of it.
+ * ---------------------------------------------------------------------------
  */
 
 import type { Confidence, Macros } from "@/lib/events";
@@ -20,23 +37,70 @@ import type { Confidence, Macros } from "@/lib/events";
 export type Reducibility = "reducible" | "irreducible";
 
 /**
+ * A physical place, shared by the check-in map (DNA Block 6) and the per-venue
+ * ranges on a dish. Both features need to agree on what a place is called, so
+ * the name lives here once and both read from it.
+ *
+ * [ASSUMPTION] All names are invented and deliberately descriptive rather than
+ * real businesses. Coordinates are plausible points in Bangkok chosen to spread
+ * legibly on a small map — they are not real addresses.
+ */
+export type Place = {
+  id: string;
+  name: string;
+  /** neutral area label for context — not a real district claim */
+  area: string;
+  /** [ASSUMPTION] [lat, lng] */
+  coords: [number, number];
+};
+
+export const places: Place[] = [
+  { id: "wok-north", name: "Wok stall — north lane", area: "north market", coords: [13.781, 100.556] },
+  { id: "noodle-oldtown", name: "Noodle house — old town", area: "old town", coords: [13.752, 100.499] },
+  { id: "hotpot-chain", name: "Hotpot chain — all-you-can-eat", area: "mall district", coords: [13.744, 100.534] },
+  { id: "salad-chain", name: "Salad chain — printed macros", area: "office district", coords: [13.73, 100.568] },
+  { id: "isaan-row", name: "Isaan stall — market row", area: "market row", coords: [13.779, 100.541] },
+  { id: "hawker-centre", name: "Hawker stall — centre market", area: "centre market", coords: [13.725, 100.53] },
+  { id: "kopitiam", name: "Neighbourhood kopitiam", area: "riverside", coords: [13.737, 100.561] },
+  { id: "canal-stalls", name: "Canal-side noodle stalls", area: "canal side", coords: [13.769, 100.537] },
+];
+
+export function placeById(id: string): Place {
+  const found = places.find((p) => p.id === id);
+  if (!found) throw new Error(`unknown place: ${id}`);
+  return found;
+}
+
+/**
  * A place the dish was logged, with its own range.
  *
- * This is the honest version of "where did your friends eat this". A map of
- * pins would be social discovery; what actually improves an estimate is that a
- * named kitchen has a fixed recipe, so its range is narrower than the
- * catch-all. Naming where you ate is therefore a real accuracy lever — and for
- * a dish whose variance is your own portion, it visibly is not.
+ * What actually improves an estimate is that a fixed kitchen has a fixed
+ * recipe, so its range is narrower than the catch-all. Naming where you ate is
+ * therefore a real accuracy lever — and for a dish whose variance is your own
+ * portion, it visibly is not.
  */
 export type Venue = {
   name: string;
-  /** the district/area, for context — not for navigation */
+  /** the area, for context — not for navigation */
   area: string;
   logCount: number;
   kcalRange: [number, number];
   /** the unnamed catch-all bucket rather than a specific kitchen */
   generic?: boolean;
+  /** links back to the map pin, absent for the catch-all bucket */
+  placeId?: string;
 };
+
+/** A venue that is a real pin on the map — name and area come from the place. */
+function atPlace(placeId: string, logCount: number, kcalRange: [number, number]): Venue {
+  const p = placeById(placeId);
+  return { name: p.name, area: p.area, logCount, kcalRange, placeId };
+}
+
+/** The unnamed catch-all: logs where nobody said where they were. */
+function unnamed(label: string, logCount: number, kcalRange: [number, number]): Venue {
+  return { name: label, area: "everywhere", logCount, kcalRange, generic: true };
+}
 
 export type Dish = {
   id: string;
@@ -88,9 +152,9 @@ export const dishes: Dish[] = [
       "Rice noodles wok-fried with tamarind, palm sugar, fish sauce and egg. The sauce carries most of the carbohydrate, and the noodles absorb far more oil in a hot wok than the plate suggests.",
     logTip: "Name the stall. A fixed wok cuts this range roughly in half.",
     venues: [
-      { name: "Corner stall, Soi 38", area: "Thonglor", logCount: 89, kcalRange: [640, 695] },
-      { name: "Thipsamai", area: "Phra Nakhon", logCount: 74, kcalRange: [730, 795] },
-      { name: "Unnamed stalls", area: "everywhere", logCount: 249, kcalRange: [640, 810], generic: true },
+      atPlace("wok-north", 89, [640, 695]),
+      atPlace("noodle-oldtown", 74, [730, 795]),
+      unnamed("Unnamed stalls", 249, [640, 810]),
     ],
   },
   {
@@ -113,10 +177,7 @@ export const dishes: Dish[] = [
     // Deliberately the same range at both venues. Naming the restaurant is
     // useless here, and showing two identical bars proves it better than a
     // sentence claiming it.
-    venues: [
-      { name: "Shabu chain, all-you-can-eat", area: "citywide", logCount: 121, kcalRange: [700, 1400] },
-      { name: "Unnamed", area: "everywhere", logCount: 168, kcalRange: [700, 1400], generic: true },
-    ],
+    venues: [atPlace("hotpot-chain", 121, [700, 1400]), unnamed("Unnamed", 168, [700, 1400])],
     trips: "red-meat-uric-acid",
   },
   {
@@ -136,10 +197,7 @@ export const dishes: Dish[] = [
     background:
       "Grilled chicken, a grain base and greens, assembled to a specification. Chains weigh their components, which is the entire reason this is the tightest estimate on the board.",
     logTip: "Nothing to add. A printed recipe is already the best data we can get.",
-    venues: [
-      { name: "Chain, printed macros", area: "citywide", logCount: 402, kcalRange: [525, 545] },
-      { name: "Unnamed", area: "everywhere", logCount: 229, kcalRange: [510, 570], generic: true },
-    ],
+    venues: [atPlace("salad-chain", 402, [525, 545]), unnamed("Unnamed", 229, [510, 570])],
   },
   {
     id: "som-tam",
@@ -158,10 +216,7 @@ export const dishes: Dish[] = [
     background:
       "Green papaya pounded with lime, chilli, fish sauce and palm sugar. There is almost no fat in it — the calories are nearly all palm sugar, added by hand and to taste.",
     logTip: "Say whether you asked for less sugar. That single detail is most of the variance.",
-    venues: [
-      { name: "Isaan stall, Ari", area: "Phaya Thai", logCount: 71, kcalRange: [135, 168] },
-      { name: "Unnamed stalls", area: "everywhere", logCount: 285, kcalRange: [130, 200], generic: true },
-    ],
+    venues: [atPlace("isaan-row", 71, [135, 168]), unnamed("Unnamed stalls", 285, [130, 200])],
   },
   {
     id: "chicken-rice",
@@ -181,9 +236,9 @@ export const dishes: Dish[] = [
       "Poached chicken served with rice cooked in the rendered fat and stock. The rice is the calorie story here, not the chicken — which is why a smaller portion of rice moves this more than swapping the meat.",
     logTip: "Note if you left rice behind. Food you did not eat is invisible in everyone else's logs.",
     venues: [
-      { name: "Tian Tian, Maxwell", area: "Singapore", logCount: 118, kcalRange: [585, 640] },
-      { name: "Neighbourhood kopitiam", area: "Singapore", logCount: 96, kcalRange: [625, 685] },
-      { name: "Unnamed", area: "everywhere", logCount: 294, kcalRange: [575, 690], generic: true },
+      atPlace("hawker-centre", 118, [585, 640]),
+      atPlace("kopitiam", 96, [625, 685]),
+      unnamed("Unnamed", 294, [575, 690]),
     ],
   },
   {
@@ -203,10 +258,7 @@ export const dishes: Dish[] = [
     background:
       "Small bowls of noodle soup in a dark broth traditionally thickened with pork blood, which adds iron and body but very little fat. Portions are deliberately tiny — the format assumes you order several.",
     logTip: "Log the number of bowls, not just the dish. Bowl count is the whole variable.",
-    venues: [
-      { name: "Victory Monument stalls", area: "Ratchathewi", logCount: 52, kcalRange: [300, 415] },
-      { name: "Unnamed", area: "everywhere", logCount: 95, kcalRange: [280, 520], generic: true },
-    ],
+    venues: [atPlace("canal-stalls", 52, [300, 415]), unnamed("Unnamed", 95, [280, 520])],
   },
   {
     id: "mango-sticky-rice",
@@ -378,7 +430,7 @@ export const feedPosts: FeedPost[] = [
     authorId: "arun",
     dishId: "pad-thai",
     time: "19:20",
-    caption: "Corner stall on Soi 38. Extra peanuts.",
+    caption: "Wok stall up on the north lane. Extra peanuts.",
     alsoAte: 44,
   },
   {
@@ -408,3 +460,66 @@ export const feedPosts: FeedPost[] = [
     honestyNote: "Flagged that the request may have been ignored, so the estimate stays wide.",
   },
 ];
+
+/* ------------------------------------------------------------------ *
+ * Check-in map — DNA Block 6
+ *
+ * Block 6 specifies a "virtual activity map, friends see where you plan to go /
+ * went, momentum & social accountability". The two statuses are not decoration
+ * of one another, and the *planned* half is the one that earns the feature:
+ *
+ *   - "went" is history. It is what feeds the per-venue ranges above.
+ *   - "planned" is actionable. A restaurant the system knows about in advance
+ *     stops being scenario S1 (plan breaks with zero notice, widest possible
+ *     estimate) and becomes something the engine can prepare for — which is the
+ *     difference between guessing at a photo afterwards and having a target for
+ *     the meal before it happens.
+ *
+ * This is also why joining a plan must not log anything: nothing has been eaten
+ * yet. Per DNA §4.12 the system proposes and the user disposes, so a join
+ * produces a pre-plan proposal, never a silent entry in the log.
+ * ------------------------------------------------------------------ */
+
+/** [ASSUMPTION] The city the demo map is centred on, with invented coordinates. */
+export const mapCity = { name: "Bangkok", center: [13.7555, 100.532] as [number, number] };
+
+export type CheckIn = {
+  id: string;
+  authorId: string;
+  placeId: string;
+  dishId: string;
+  status: "planned" | "went";
+  /** clock time for "went", a human label like "tomorrow 12:30" for "planned" */
+  time: string;
+};
+
+export const checkIns: CheckIn[] = [
+  { id: "c1", authorId: "arun", placeId: "wok-north", dishId: "pad-thai", status: "went", time: "19:20" },
+  { id: "c2", authorId: "mai", placeId: "hotpot-chain", dishId: "shabu", status: "went", time: "20:40" },
+  { id: "c3", authorId: "mai", placeId: "isaan-row", dishId: "som-tam", status: "went", time: "11:50" },
+  { id: "c4", authorId: "sara", placeId: "kopitiam", dishId: "chicken-rice", status: "went", time: "12:40" },
+  // The three planned ones carry the demo's argument. The hotpot plan is
+  // deliberately a dish that trips a medical rule, so the map can surface the
+  // rule BEFORE the meal instead of scoring it afterwards.
+  { id: "c5", authorId: "sara", placeId: "salad-chain", dishId: "protein-bowl", status: "planned", time: "tomorrow 12:30" },
+  { id: "c6", authorId: "arun", placeId: "hotpot-chain", dishId: "shabu", status: "planned", time: "tomorrow 19:00" },
+  { id: "c7", authorId: "mai", placeId: "canal-stalls", dishId: "boat-noodles", status: "planned", time: "tomorrow 13:00" },
+];
+
+/**
+ * Friends who log from other cities. Surfaced as a plain count rather than
+ * dropped silently, so the map does not imply the whole community is here.
+ */
+export function friendsElsewhere(): number {
+  const onMap = new Set(checkIns.map((c) => c.authorId));
+  return authors.filter((a) => !onMap.has(a.id) || a.city !== mapCity.name).length;
+}
+
+export function checkInsAtPlace(placeId: string): CheckIn[] {
+  return checkIns.filter((c) => c.placeId === placeId);
+}
+
+/** Planned check-ins are the actionable ones, so they lead the list. */
+export function plannedCheckIns(): CheckIn[] {
+  return checkIns.filter((c) => c.status === "planned");
+}
