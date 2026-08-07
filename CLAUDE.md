@@ -342,8 +342,40 @@ Ownership is enforced by prefix, verified: unauthenticated `GET`/`POST` on both
 meal routes return 401, and an authenticated request for another user's photo
 pathname returns 404 rather than a signed URL.
 
-**Not real yet:** nothing reads `meal_log` back into the planner, so logging a
-meal does not yet change the next proposal. That is the obvious next seam.
+- `/live` now shows logged protein against the day's commitment
+  (`components/live/logged-against-target.tsx`), reading `proposal.dayTarget`.
+
+### 5.1 The macro columns were dead, and that was invisible
+
+`proteinTargetG`, `proteinFloorG`, `carbTargetG`, `kcalTarget` and `mealsPerDay`
+existed in the schema and were *read* throughout the planner, but **nothing ever
+wrote them**. Every profile had them null, so the planner's whole per-slot macro
+path was permanently inert and no user could ever have a target. The types were
+satisfied end to end; only querying the live row revealed it.
+
+The lesson generalises: a nullable column that is read but never written
+typechecks perfectly and silently disables the feature that depends on it. When a
+feature "does nothing", check that its inputs are actually populated before
+debugging the logic.
+
+The goal step now collects target and floor. Deliberately typed, not derived from
+bodyweight: a derived figure is the app's inference wearing the user's
+commitment, and §4.11 forbids exactly that. Blank stays null.
+
+`DayTarget.proteinKind` carries `TARGET | FLOOR` because the two are different
+claims — clearing a 150g floor is a success, missing a 205g target by 55g is not,
+and one bar showing one number without saying which would be the same failure.
+Note the trap encoded in the tests: on an imprecise day with *no* floor set the
+figure falls back to the target, so it must not then be labelled a floor.
+
+Validation rejects a floor above the target (almost always the two swapped) and
+anything outside 20–400g, since 1600 for 160 is a typo that would silently
+reshape every plan. When no target is set the card shows the real logged total
+with **no bar** — a progress bar needs a denominator, and showing nothing at all
+would hide data the user typed in by hand.
+
+**Not real yet:** nothing reads `meal_log` back into the *planner*, so logging a
+meal changes the header but not the next proposal. That is the next seam.
 
 ## 6. Working practice
 
