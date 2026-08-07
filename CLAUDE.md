@@ -556,3 +556,32 @@ fallback chain reaches `VERCEL_URL`, which is **deployment-specific** on preview
 (`healthos-demo-a1b2c3.vercel.app`). That can never match a registered URI, so the
 variable must stay pinned to the stable production origin even though the fallback
 looks like it would cope.
+
+### 6.3 Adding an env var does not change an already-deployed site
+
+Adding the `WHOOP_*` vars did not enable the Connect button on production, because
+Vercel binds environment variables **at build time**. The live deployment predated
+them (confirmed by the response `age` header: built ~5 minutes before the vars were
+written) and kept showing SETUP NEEDED. Only a redeploy picks them up.
+
+The preview and production diverge here, which is the confusing part — the same
+page, signed in as the same user at the same moment, rendered a working button on
+`localhost:3000` and a disabled one on `*.vercel.app`. So **always establish which
+surface a screenshot is from before diagnosing**; a fix verified on the preview says
+nothing about the deployed site. The dev server reads `.env.development.local` on
+start, so restarting it is enough locally, and that difference is exactly what makes
+it a false confirmation for production.
+
+The old SETUP NEEDED copy actively misdirected: it said the vars were "not set" and
+to "then reload". Both were wrong in the case that actually happened — they *were*
+set, and reloading a deployed page can never pick up new env vars — so it sent the
+reader back to a dashboard they had already filled in correctly. It now says "not
+visible to this deployment" and asks for a **redeploy**, naming build-time binding
+as the reason.
+
+Diagnosing which surface is which, without guessing:
+
+```bash
+# production: large `age` means the build predates a recent env change
+curl -sI https://healthos-demo-chi.vercel.app/privacy | grep -iE '^(age|x-vercel-id|date)'
+```
