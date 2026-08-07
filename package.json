@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test:planner": "tsx scripts/test-planner.ts"
+    "test:planner": "tsx scripts/test-planner.ts",
+    "test:strip": "tsx scripts/test-strip-metadata.ts"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.22",
