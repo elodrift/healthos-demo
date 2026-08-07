@@ -33,7 +33,7 @@ export default async function SignInPage() {
         Sign in
       </h1>
       <p className="mt-2 mb-7 text-[14px] leading-relaxed text-ink-mid">
-        Live mode reads your real WHOOP data. The scripted demo needs no account.
+        HealthOS reads your real WHOOP data, so it needs an account.
       </p>
 
       <AuthForm mode="sign-in" />

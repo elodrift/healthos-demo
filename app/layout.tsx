@@ -7,8 +7,10 @@ const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", displ
 
 export const metadata: Metadata = {
   title: "HealthOS — your health, orchestrated",
+  // Not "play one simulated day" — the scripted demo it referred to has been
+  // deleted, and this is the text that shows up in link previews and search.
   description:
-    "Play one simulated day with HealthOS: nutrition and training that adapt the moment life changes, grounded in your bloodwork and honest about uncertainty.",
+    "Nutrition and training that adapt to your own recovery and sleep the moment life changes — honest about uncertainty, and never inventing a number.",
 };
 
 export const viewport: Viewport = {

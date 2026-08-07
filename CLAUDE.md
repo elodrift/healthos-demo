@@ -11,11 +11,16 @@ It carries an instruction that binds you:
 > If a proposed change conflicts with this document, STOP and flag it to the
 > founder — do not silently proceed.
 
-`docs/DEMO_SPEC.md` is the build spec for this demo: what it must show, what it
-must never claim, and how fixture data must be marked.
+`docs/DEMO_SPEC.md` was the build spec for the scripted demo. **That demo has
+been deleted at the founder's instruction** (see §4), so this file is now
+historical: its fixture-marking rules no longer apply to any live code. It is
+deliberately kept rather than deleted, because it is a founder document and
+deleting one is the founder's call, not yours. Its *principles* — never claim
+more than you can show, mark estimates as estimates — still bind, and are now
+enforced in `lib/food/recognize.ts` instead.
 
-Neither file is a suggestion. If this file and those two ever disagree, **they
-win** and this file is the thing that is wrong.
+`PRODUCT_DNA.md` is not a suggestion. If this file and it ever disagree, **it
+wins** and this file is the thing that is wrong.
 
 ## 2. Two rules that have already been broken once
 
@@ -182,6 +187,43 @@ Two more things about `tsc` here:
   per-deployment one, which matters because WHOOP's redirect URI is registered
   once.
 
+### 2.8 The vision model list is measured, not chosen
+
+`lib/food/recognize.ts` picks models by what the gateway *actually serves on this
+project's tier*, which is not the same as what the model list advertises:
+
+- Every `gemini-3.x` model — including `gemini-3-flash` — returns **"Free tier
+  users do not have access to this model"**. They appear in
+  `GET /v1/models` regardless, so listing a model proves nothing about access.
+- `gemini-2.5-flash` and `gemini-2.5-flash-lite` work.
+- `openai/gpt-4o-mini` works but hits `429 rate limit exceeded` quickly, so it is
+  last, not first.
+
+Two consequences worth keeping:
+
+- **Probing burns the quota.** A handful of test calls put *all* models into 429
+  for a while. If recognition suddenly degrades during development, suspect the
+  quota before the code.
+- **`maxRetries: 1`.** The SDK default of 3 across three models is nine round
+  trips, measured at 22s against a rate-limited gateway — past the route budget,
+  so the user would see a timeout instead of the graceful "type it in" fallback.
+
+To re-measure after a tier change, run the recognition path directly against a
+real photo without going through the browser:
+
+```
+npx tsx --env-file-if-exists=/vercel/share/.env.project \
+  scripts/probe-recognize.ts public/feed/boat-noodles.png
+```
+
+It prints the chosen model, so it tells you which entry in `MODELS` actually
+answered rather than which one you hoped would.
+
+If paid credits are added, promote `google/gemini-3.6-flash` to the front of
+`MODELS`; nothing else needs to change. Verify the degraded path by temporarily
+replacing `MODELS` with one bogus id — the confirm card must show empty fields
+and a disabled button, never a fabricated number.
+
 ## 3. Product rules that constrain code, not just copy
 
 These come from the DNA. They are listed here because each one has a concrete
@@ -205,56 +247,72 @@ implementation consequence that is easy to break by accident.
 ## 4. Where things are
 
 ```
-app/day/            the demo route
-components/         UI. DemoShell is the top-level composition
-components/cards/   the typed agent cards (proposals, never-suspends, …)
-lib/store.ts        zustand store; all demo state and actions
-lib/agent/respond.ts  deterministic reply beats — the "rules engine"
-lib/agent/nlu.ts      intent matching
-lib/fixtures/       all demo data. community.ts carries the [ASSUMPTION] banner
-lib/reducer.ts      event reducer for the engine pane
-docs/               PRODUCT_DNA.md (canonical) + DEMO_SPEC.md
+app/live/           the only day view — real WHOOP + goal contract + planner
+app/log/            meal photo logging (upload → recognise → confirm → list)
+app/api/meal-photo/upload/  strip EXIF server-side, store private, recognise
+app/api/meals/      POST a confirmed meal, GET today's meals
+lib/food/recognize.ts   vision estimate; fallback chain, never fabricates
+lib/live/build-day.ts   joins recovery + sleep + contract into a timed day
+lib/live/local-day.ts   the user's calendar day, in *their* timezone
+lib/planner/        pure planner. No IO, no fixtures — this is why it is testable
+lib/photo/photo-path.ts per-user blob prefix; the ownership boundary
+docs/               PRODUCT_DNA.md (canonical)
 ```
 
-Reply beats are deterministic and live in `respond.ts`. The demo labels which
-component answered (`rules engine` vs `language model`) and that label must stay
-truthful — it is the argument the demo is making.
+**The scripted demo has been deleted** (`app/day`, `app/results`, `lib/store.ts`,
+`lib/agent/`, `lib/fixtures/`, `lib/reducer.ts`, `components/cards/`, and the
+phone-frame chat UI). It was a 669-line fixture narrative sitting next to real
+output, which is exactly what someone mistakes for their own data. `DEMO_SPEC.md`
+now describes nothing that exists. If you need the walkthrough back, it is in
+git history — do not rebuild it beside `/live`.
+
+`public/feed/*.png` survived the deletion on purpose: they are the only real
+photographs in the repo, so they are the EXIF-strip and recognition fixtures.
+
+`app/api/agent/` went with it, and the reason is worth keeping. It was a real,
+working open-ended chat endpoint, but its only caller was the deleted chat UI —
+leaving an **unauthenticated** route that calls a paid model. Deployed, anyone
+could POST to it and drain the same gateway quota `recognize.ts` depends on, so
+dead code would have been able to disable a live feature. If you bring the chat
+back, gate it on a session first; it is in git history.
 
 ## 5. Current state
 
 Built and verified in-browser at mobile portrait (302px), which is the primary
-surface:
+surface. Everything below was exercised end-to-end against the live database,
+not just typechecked.
 
-- Scripted day with free-typing escape hatch, engine pane, timeline scrubber
-- Community screen with two views behind a segmented control:
-  - **Feed** — ranked by *uncertainty*, not popularity. `DishLearnMore.tsx`
-    gives per-dish variance explanation, per-venue ranges, and a logging tip.
-  - **Check-ins** — DNA Block 6 map (`CheckInMap.tsx`), react-leaflet 4.2.1,
-    friend `planned` / `went` pins.
-- `joinPlan` records a plan and emits **no** `FOOD_LOGGED` event. Joining must
-  never move the macro header. This is §4.12 applied to a future meal and is
-  worth an explicit test if you refactor the store.
-- **Proposals are selectable** (`components/cards/ProposalsCard.tsx`). The card
-  used to be a read-only list under the words "your call", so the §4.12 promise
-  was made and then not honoured — there was nothing to dispose *with*. Choosing
-  writes `chosenProposals[beatId]` and shows a receipt. Like `joinPlan`, it emits
-  no event and moves no macro: committing to a plan is not eating.
-- **Over target reads neutral, never red** (`MacroHeader.tsx`). Consumed used to
-  stay brand-green while the bar clamped at 100%, so 224g against a 205g target
-  looked exactly like hitting it. It now drops to `ink-hi` with a `(+19g)` delta.
-  Deliberately not red — being over on carbs is information, a medical rule
-  breach is not, and the two must not look alike.
-- Scrubber stops are 44px minimum (were 34px), and setup is three steps, not
-  four: the goal step had nothing to decide on it.
+**Real and working:**
 
-One audit finding was **not** real: it claimed `scrollIntoView` fought user
-scroll. There was no `scrollIntoView` in the codebase — `ChatStream` uses a
-container-scoped `scrollTo` with a deliberate observer-loop guard. Verify claims
-against the code before you act on them, including the ones in this file.
+- Email + password auth (Better Auth), goal contract persisted in Neon.
+- `/live` — joins WHOOP recovery/sleep with the goal contract via the pure
+  planner. Every failure is a named union variant, so it cannot render a plan
+  built from nothing. Timezone is load-bearing: WHOOP returns sleep-end as a UTC
+  instant plus the user's offset, so formatting in the server's zone would shift
+  every meal. 24 checks cover offsets, midnight wrap both ways, half/45-minute
+  zones, and nap filtering.
+- `/log` — the full food loop. Photo → **server-side** EXIF/GPS strip → private
+  blob under a per-user prefix → vision estimate → **user confirms** → row in
+  `meal_log` → today's list against live targets.
 
-Known-deliberate gaps: two dishes have no venue data, because not every dish
-needs every feature. The map covers one city; friends elsewhere are surfaced as
-a count rather than dropped silently.
+**Why the confirm step is not optional** (§4.12): an auto-logged wrong estimate
+silently corrupts the day's totals, and the whole argument of the app is that it
+does not invent numbers. The confirm card shows the model's own `confidence` and
+`caveat`, and every stored row carries `estimated: true` plus `source`.
+
+**The degraded path is the important one.** When every model is unreachable or
+rate-limited, recognition returns `unavailable`: fields come up empty, the log
+button stays disabled, and the photo is still saved. Verified by forcing it, not
+assumed. Recognition failure must never fail the upload — the photo is already
+stored and clean, and a model outage should downgrade the user to typing, not
+lose their photo.
+
+Ownership is enforced by prefix, verified: unauthenticated `GET`/`POST` on both
+meal routes return 401, and an authenticated request for another user's photo
+pathname returns 404 rather than a signed URL.
+
+**Not real yet:** nothing reads `meal_log` back into the planner, so logging a
+meal does not yet change the next proposal. That is the obvious next seam.
 
 ## 6. Working practice
 

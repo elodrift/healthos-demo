@@ -2,17 +2,25 @@ import Link from "next/link";
 import { Disclaimer } from "@/components/Disclaimer";
 
 const strip = [
+  // Was "your protein floor comes from your lipid panel, not a calculator",
+  // stated as present fact. Bloodwork upload is not built (onboarding says so
+  // in as many words), so the claim outran the code. This says what today's
+  // targets are actually derived from.
   {
-    title: "Biomarker-aware",
-    body: "Your protein floor comes from your lipid panel, not a calculator. Every target shows where it came from.",
+    title: "Built from your own signals",
+    body: "Targets come from your goal contract and last night's recovery and sleep — not a generic calculator. Every one shows where it came from.",
   },
   {
     title: "Adapts all day",
     body: "Skipped session, unplanned restaurant, schedule chaos — targets revise the moment the day changes.",
   },
+  // Was "a deterministic engine logs each decision with its cause — read the
+  // reasoning event by event". That described the scripted demo's engine pane,
+  // which has been deleted, so it became a promise the app no longer keeps.
+  // Replaced with what the food loop actually does today.
   {
-    title: "Every decision explained",
-    body: "A deterministic engine logs each decision with its cause. You can read the reasoning, event by event.",
+    title: "Estimates admit they are estimates",
+    body: "Photograph a meal and you get an estimate with its confidence and caveats — yours to correct before anything is logged.",
   },
 ];
 
@@ -46,8 +54,9 @@ export default function LandingPage() {
             Your health, orchestrated. All day. Every day.
           </h1>
           <p className="mt-5 max-w-xl text-pretty text-[15px] leading-relaxed text-ink-mid sm:text-base">
+            {/* Not "grounded in your bloodwork" — that upload is not built yet. */}
             HealthOS adapts your nutrition and training the moment life changes — grounded in your
-            bloodwork, honest about uncertainty.
+            own recovery data, honest about uncertainty.
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
