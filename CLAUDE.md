@@ -74,6 +74,45 @@ The lesson generalises: a document arriving later, with more confidence and
 better typography, is still not canonical. Check it against the two docs in
 `docs/` and flag the conflict instead of implementing the newest thing you read.
 
+### 2.4 Live mode graduated past DEMO_SPEC; the demo path did not change
+
+`DEMO_SPEC.md` lists as non-goals exactly what real WHOOP data requires: *"No
+health data"* (§13), *"No backend for v1"* (§146), *"real wearable
+connections"* (§203). `PRODUCT_DNA.md §97` pulls the other way — onboarding
+*"does not exist yet — must be built"*, with wearable connection named as a
+differentiator.
+
+The founder's ruling, on the record:
+
+- **Dual mode.** The scripted `/day` replay stays exactly as specced, for
+  pitching without a login. Real WHOOP data lives in a separate authenticated
+  **Live mode**. A change to Live mode must not touch the demo path.
+- **WHOOP now; Garmin marked honestly unavailable.** The Garmin Health API is
+  closed to new third-party developers — the application form is gone and
+  access is restricted to enterprise partners. A "Connect Garmin" button would
+  be theatre, which §4.11 forbids. Reaching Garmin later means an aggregator
+  (Terra, Vital), which is a paid dependency and a separate decision.
+- **Photos are content, not a fix.** See §2.5.
+
+### 2.5 Two claims I made that measurement disproved
+
+Both were plausible, confidently stated, and wrong. Recorded so they are not
+repeated or "re-fixed" on my authority.
+
+- **"The feed ships 16 MB of images to mobile."** It does not. `next/image` is
+  active with correct `sizes` and no `unoptimized` flag, so a 2090 KB source
+  PNG is served as **8 KB** at a 302 px viewport — a 99.6% reduction that was
+  already happening. The 16 MB is repo weight only. There was no performance
+  bug; the image task was deleted rather than "fixed".
+- **"Register `https://healthos-3.v0.build/...` with WHOOP."** That origin is
+  **not public**. It answers `302` to `v0.app/chat/unauthorized`, because the
+  preview is scoped to the authenticated chat. WHOOP cannot fetch a privacy
+  policy behind it, and an OAuth callback would be bounced through the gate.
+  Both URLs must come from the published Vercel domain.
+
+The pattern in both: an assumption about the platform, asserted instead of
+measured. `curl` the origin and measure the transfer before advising.
+
 ## 3. Product rules that constrain code, not just copy
 
 These come from the DNA. They are listed here because each one has a concrete
