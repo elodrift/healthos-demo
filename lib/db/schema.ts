@@ -144,22 +144,83 @@ export const wearableDaily = pgTable(
   }),
 );
 
-/** Answers captured once during onboarding. */
+/**
+ * Onboarding capture, per DNA §6.
+ *
+ * §6 is explicitly a differentiator: connector-first onboarding (labs,
+ * body composition, wearable) AND a goal contract. Capturing the connectors
+ * without the contract would put us exactly where §6 says competitors are.
+ *
+ * §116 defines "complete" behaviourally, not by field count: onboarding is
+ * only done when the engine can answer "what is today's plan?" from what was
+ * captured. `completedAt` should only be stamped once that holds.
+ */
 export const onboardingProfile = pgTable("onboarding_profile", {
   id: serial("id").primaryKey(),
   userId: text("userId").notNull().unique(),
   goal: text("goal"),
+
+  /* --- §6 Step 2: the goal contract --- */
+  /** Free text: recomposition, performance, marker correction, ... */
+  objective: text("objective"),
+  targetDate: date("targetDate"),
+  /**
+   * "STRICT_HEALTHY" | "FAST_AGGRESSIVE".
+   * §112: this is a policy switch, not a label — it must change daily
+   * orchestration behaviour. See lib/planner for how it is consumed.
+   */
+  goalMode: text("goalMode"),
+
+  /**
+   * "FULL" | "PARTIAL" | "MINIMAL" | "UNKNOWN" — §4.11.
+   * How much agency the user has over their food right now. Precision scales
+   * with this; demanding gram-level input on a MINIMAL day is a design
+   * failure, so the planner reads this before choosing how precise to be.
+   */
+  controlLevel: text("controlLevel").notNull().default("UNKNOWN"),
+
+  /* --- §6 Step 2: lifestyle constraints --- */
+  eatingOutFrequency: text("eatingOutFrequency"),
+  foodPreferences: text("foodPreferences"),
+  trainingSchedule: text("trainingSchedule"),
+  supplementStack: text("supplementStack"),
+
   proteinTargetG: integer("proteinTargetG"),
+  /** The floor defended on low-control days when full targets are unrealistic. */
+  proteinFloorG: integer("proteinFloorG"),
   carbTargetG: integer("carbTargetG"),
   kcalTarget: integer("kcalTarget"),
   typicalWakeTime: text("typicalWakeTime"),
   typicalSleepTime: text("typicalSleepTime"),
   mealsPerDay: integer("mealsPerDay"),
   medicalNotes: text("medicalNotes"),
+  baselineCapturedAt: timestamp("baselineCapturedAt"),
   completedAt: timestamp("completedAt"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
+
+/**
+ * §6 Step 1 uploads — blood markers, InBody, scans — forming the t₀ baseline.
+ * Files live in Vercel Blob; this table is the index over them.
+ */
+export const baselineDocument = pgTable(
+  "baseline_document",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("userId").notNull(),
+    /** "bloodwork" | "body_composition" | "scan" | "other" */
+    kind: text("kind").notNull(),
+    fileUrl: text("fileUrl").notNull(),
+    fileName: text("fileName"),
+    contentType: text("contentType"),
+    sizeBytes: integer("sizeBytes"),
+    uploadedAt: timestamp("uploadedAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    user: index("baseline_document_user_idx").on(t.userId),
+  }),
+);
 
 /**
  * The shape of one day: when you woke, when you train, when you sleep.
@@ -186,6 +247,17 @@ export const dayPlan = pgTable(
     /** "agent" | "user" — who authored the current values */
     proposedBy: text("proposedBy").notNull().default("agent"),
     rationale: text("rationale"),
+    /** "FULL" | "PARTIAL" | "MINIMAL" | "UNKNOWN" at the time of proposing. */
+    controlLevel: text("controlLevel").notNull().default("UNKNOWN"),
+    /**
+     * How much real wearable data backed this proposal:
+     * "MEASURED" | "PARTIAL" | "PROFILE_ONLY" | "NONE".
+     *
+     * Stored so the UI can distinguish "WHOOP measured your sleep" from
+     * "we assumed your usual wake time". §4.11 forbids presenting the second
+     * as though it were the first.
+     */
+    evidence: text("evidence").notNull().default("NONE"),
     confirmedAt: timestamp("confirmedAt"),
     createdAt: timestamp("createdAt").notNull().defaultNow(),
     updatedAt: timestamp("updatedAt").notNull().defaultNow(),
