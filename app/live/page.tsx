@@ -47,6 +47,12 @@ export default async function LivePage() {
             Chat
           </Link>
           <Link
+            href="/community"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
+          >
+            Community
+          </Link>
+          <Link
             href="/onboarding"
             className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
           >

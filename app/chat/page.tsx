@@ -53,12 +53,20 @@ export default async function ChatPage() {
           </span>
           <span className="text-[15px] font-semibold tracking-tight">HealthOS</span>
         </Link>
-        <Link
-          href="/live"
-          className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4"
-        >
-          Today
-        </Link>
+        <nav className="flex items-center gap-4">
+          <Link
+            href="/live"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
+          >
+            Today
+          </Link>
+          <Link
+            href="/community"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
+          >
+            Community
+          </Link>
+        </nav>
       </header>
 
       <ChatThread
