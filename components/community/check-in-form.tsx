@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { createCheckIn, type CheckInFormState } from "@/app/actions/community";
 
 const INITIAL: CheckInFormState = {};
@@ -28,7 +28,6 @@ export function CheckInForm() {
    */
   const [state, setState] = useState<CheckInFormState>(INITIAL);
   const [pending, setPending] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [geoState, setGeoState] = useState<"idle" | "asking" | "denied" | "unsupported">("idle");
 
@@ -70,7 +69,7 @@ export function CheckInForm() {
   }
 
   return (
-    <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-3">
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <label
           htmlFor="placeName"
