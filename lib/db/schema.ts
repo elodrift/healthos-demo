@@ -292,6 +292,43 @@ export const mealSlot = pgTable(
 );
 
 /**
+ * The conversation, one row per turn.
+ *
+ * Persisted rather than held in React state because the chat is the primary
+ * surface (DNA §7 rules for "dark, chat-first, engine-visible"), and a surface
+ * that forgets everything on refresh is a demo of a chat, not a chat.
+ *
+ * `source` records who actually produced the text — "local" for the
+ * deterministic matcher, "model" for the LLM fallback, "degraded" when no model
+ * was reachable. §4.11 forbids presenting an assumption in the same voice as a
+ * measurement, and the same applies to our own machinery: a reply the engine
+ * derived and a reply a model improvised are different kinds of claim, so the
+ * distinction is stored rather than flattened.
+ *
+ * There is deliberately no `macros` column. A turn that logs food writes a
+ * `meal_log` row and references it; duplicating the numbers here would create a
+ * second, drifting source of truth for the macro header.
+ */
+export const chatMessage = pgTable(
+  "chat_message",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("userId").notNull(),
+    /** "user" | "agent" */
+    role: text("role").notNull(),
+    text: text("text").notNull(),
+    /** "user" | "local" | "model" | "degraded" */
+    source: text("source").notNull().default("local"),
+    /** Set when this turn caused a meal to be logged, so the UI can link them. */
+    mealLogId: integer("mealLogId"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    userCreated: index("chat_message_user_created_idx").on(t.userId, t.createdAt),
+  }),
+);
+
+/**
  * A meal that actually happened. Separate from mealSlot on purpose: a plan is
  * not a log, and only rows here are allowed to move the macro header.
  *
