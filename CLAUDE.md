@@ -434,6 +434,44 @@ meal changes the header but not the next proposal. That is the next seam.
   ps -eo pid,args | grep -E "next dev|next-server" | grep -v grep
   ```
 
+  **`lsof` alone is not enough either.** It has since returned *nothing* while
+  `ps` found two live `next-server` processes on the same machine. The `ps`
+  cross-check is what actually catches them, so treat it as the authority and
+  kill the PIDs it reports:
+
+  ```bash
+  ps -eo pid,args | grep -E "next dev|next-server" | grep -v grep \
+    | awk '{print $1}' | xargs -r kill -9
+  ```
+
+### 6.1 A passing local build is not evidence the deploy will work
+
+Publishing failed while `npm run build` passed locally. Cause: `lib/auth.ts`
+deliberately throws when `BETTER_AUTH_SECRET` is missing and
+`NODE_ENV === "production"` (correctly — a silently defaulted auth secret would
+invalidate every session). The secret existed **only in `.env.local`**, which is
+gitignored, so it never left the sandbox. Next loads `.env.local` automatically,
+so the local build sailed through; Vercel had no such file and the build threw at
+import time.
+
+The general trap: **a gitignored local env file makes the local build a false
+positive for anything that fail-louds on a missing secret.** Local success and
+deploy success are testing different environments.
+
+To reproduce what Vercel actually does, temporarily move `.env.local` aside and
+build from the project-level env only:
+
+```bash
+mv .env.local /tmp/env.local.bak
+set -a && source /vercel/share/.env.project && set +a && NODE_ENV=production npm run build
+mv /tmp/env.local.bak .env.local
+```
+
+Vars that must exist at **project** level, not just locally: `BETTER_AUTH_SECRET`,
+`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN`. The `WHOOP_*` vars are the deliberate
+exception — they are allowed to be absent and degrade to `NO_WHOOP_APP` rather
+than throwing, so they never block a build.
+
   The second command must print nothing before you restart. Afterwards, confirm
   the server you *think* you are talking to is the one on 3000: read the dev
   log's `Local:` line, don't assume.
