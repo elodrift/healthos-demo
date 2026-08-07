@@ -101,5 +101,83 @@ try {
 }
 check("throws when nothing is resolvable", threw);
 
+/*
+ * Environment precedence.
+ *
+ * WHOOP_REDIRECT_BASE_URL applies to every environment at once, so a value that
+ * makes preview work would otherwise be sent as `redirect_uri` on production and
+ * be rejected as a mismatch. This is not hypothetical: the variable in this
+ * project was in fact set to a preview URL, and the deploy would have looked
+ * completely healthy until someone clicked Connect.
+ */
+function withEnv(
+  env: Record<string, string | undefined>,
+  run: () => string,
+): string {
+  const keys = [
+    "VERCEL_ENV",
+    "VERCEL_PROJECT_PRODUCTION_URL",
+    "VERCEL_URL",
+    "V0_RUNTIME_URL",
+    "WHOOP_REDIRECT_BASE_URL",
+  ];
+  const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  for (const k of keys) delete process.env[k];
+  for (const [k, v] of Object.entries(env)) {
+    if (v !== undefined) process.env[k] = v;
+  }
+  try {
+    return run();
+  } finally {
+    for (const k of keys) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k] as string;
+    }
+  }
+}
+
+const PROD = "healthos-demo-chi.vercel.app";
+const PREVIEW = "healthos-demo-git-abc123.vercel.app";
+
+const onProduction = withEnv(
+  {
+    VERCEL_ENV: "production",
+    VERCEL_PROJECT_PRODUCTION_URL: PROD,
+    WHOOP_REDIRECT_BASE_URL: `https://${PREVIEW}`,
+  },
+  whoopRedirectUri,
+);
+check(
+  "production ignores a preview WHOOP_REDIRECT_BASE_URL",
+  onProduction === EXPECTED,
+  onProduction,
+);
+
+// Off production the override must still work, or preview and local break.
+const onPreview = withEnv(
+  {
+    VERCEL_ENV: "preview",
+    VERCEL_PROJECT_PRODUCTION_URL: PROD,
+    WHOOP_REDIRECT_BASE_URL: `https://${PREVIEW}`,
+  },
+  whoopRedirectUri,
+);
+check(
+  "preview still honours the override",
+  onPreview === `https://${PREVIEW}/api/whoop/callback`,
+  onPreview,
+);
+
+// Production with no override set: the domain must still resolve on its own.
+const prodNoOverride = withEnv(
+  { VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: PROD },
+  whoopRedirectUri,
+);
+check(
+  "production self-configures without the override",
+  prodNoOverride === EXPECTED,
+  prodNoOverride,
+);
+
 console.log(failures === 0 ? "\nall passed" : `\n${failures} failed`);
 process.exit(failures === 0 ? 0 : 1);

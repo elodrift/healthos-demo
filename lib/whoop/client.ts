@@ -58,7 +58,31 @@ function credentials() {
 
 /** The app's registered redirect URI, resolved per environment. */
 export function whoopRedirectUri(): string {
+  /*
+   * On production the stable production domain wins over
+   * WHOOP_REDIRECT_BASE_URL; everywhere else the env var still takes precedence.
+   *
+   * The env var used to win unconditionally, which is the wrong way round for the
+   * one environment that matters. A single WHOOP_REDIRECT_BASE_URL applies to
+   * every environment, so whatever value makes local or preview work — and in
+   * this project it is currently a preview URL — would follow the code to
+   * production and be sent as `redirect_uri` there. WHOOP compares that against
+   * its registered URI and rejects the mismatch, so connecting fails on the
+   * deployed app while working perfectly in preview. Worse, the deploy itself
+   * looks entirely healthy: nothing throws until a user clicks Connect.
+   *
+   * Preferring VERCEL_PROJECT_PRODUCTION_URL when VERCEL_ENV === "production"
+   * makes production self-configuring and keeps the override useful for the
+   * environments that genuinely need to point somewhere custom.
+   */
+  const productionDomain =
+    process.env.VERCEL_ENV === "production" &&
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : undefined;
+
   const base =
+    productionDomain ??
     process.env.WHOOP_REDIRECT_BASE_URL ??
     (process.env.VERCEL_PROJECT_PRODUCTION_URL
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
