@@ -11,9 +11,12 @@
   "dependencies": {
     "@types/leaflet": "^1.9.22",
     "ai": "^7.0.55",
+    "better-auth": "^1.6.26",
+    "drizzle-orm": "^0.45.2",
     "framer-motion": "^11.11.9",
     "leaflet": "^1.9.4",
     "next": "14.2.35",
+    "pg": "^8.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
@@ -22,6 +25,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
+    "@types/pg": "^8.20.4",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
