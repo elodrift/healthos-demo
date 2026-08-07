@@ -106,8 +106,18 @@ export function Composer() {
             e.preventDefault();
             submit(value);
           }}
-          placeholder="Tell me what you ate, or what changed"
-          className="max-h-24 min-h-[42px] flex-1 resize-none rounded-2xl border border-base-600 bg-base-850 px-3.5 py-2.5 text-[14px] leading-relaxed text-ink-hi outline-none transition placeholder:text-ink-lo focus:border-accent-green/60"
+          // Kept short deliberately: at 302px the longer phrasing wrapped to a
+          // second line the one-line-tall field then clipped.
+          placeholder="What you ate, or what changed"
+          /*
+           * `field-sizing-content` lets the textarea grow to its own content
+           * instead of being pinned at one line. Shortening the placeholder
+           * alone did not fix the clipping — at 302px it still wrapped, so the
+           * field has to be able to accommodate two lines. min-h keeps it
+           * square against the send button when empty; max-h stops long input
+           * from eating the chat.
+           */
+          className="max-h-24 min-h-[42px] flex-1 resize-none rounded-2xl border border-base-600 bg-base-850 px-3.5 py-2.5 text-[14px] leading-relaxed text-ink-hi outline-none transition [field-sizing:content] placeholder:text-ink-lo focus:border-accent-green/60"
         />
         <button
           type="submit"
