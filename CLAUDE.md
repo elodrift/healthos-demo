@@ -528,3 +528,31 @@ so they never block a build.
 Two follow-on notes. Changing `BETTER_AUTH_SECRET` later signs out every existing
 user, so it is set once and left alone. And this build is what poisons `.next` for
 the dev server every time, so expect to run the §6 orphan-kill afterwards.
+
+### 6.2 `WHOOP_REDIRECT_BASE_URL` is an origin, and gets set to the callback
+
+During setup this was set to the **full callback URL** instead of the origin, so
+`whoopRedirectUri()` appended its own path and produced
+`.../api/whoop/callback/api/whoop/callback`. WHOOP rejects that as a
+`redirect_uri` mismatch — an error that names the parameter but not the
+duplication, so it reads like a dashboard misconfiguration and sends you looking
+in the wrong place.
+
+This is a predictable confusion rather than carelessness: WHOOP's dashboard asks
+for the *entire* redirect URI, so that string is the one in front of whoever is
+configuring the app, and it is the natural thing to paste. Since the code always
+appends the path itself, a supplied one is unambiguously redundant, so
+`whoopRedirectUri()` now strips a trailing `/api/whoop/callback` as well as
+trailing slashes, and assumes `https://` for a bare host.
+
+`npm run test:whoop` pins the invariant that actually matters — one callback path
+in the output, character-for-character equal to the registered URI — across all
+five spellings, including the one that broke. It also asserts the function
+*throws* when nothing is resolvable, since emitting a malformed URI would surface
+as the same opaque WHOOP error.
+
+Related trap in the same function: with `WHOOP_REDIRECT_BASE_URL` unset, the
+fallback chain reaches `VERCEL_URL`, which is **deployment-specific** on previews
+(`healthos-demo-a1b2c3.vercel.app`). That can never match a registered URI, so the
+variable must stay pinned to the stable production origin even though the fallback
+looks like it would cope.
