@@ -2,6 +2,10 @@
 
 import { useCallback, useRef, useState } from "react";
 
+import type { RecognitionResult } from "@/lib/food/recognize";
+
+import { MealConfirm } from "./meal-confirm";
+
 /** Mirrors MAX_PHOTO_BYTES on the server so the UI can refuse early. */
 const MAX_BYTES = 4_000_000;
 
@@ -13,6 +17,7 @@ interface UploadedPhoto {
   removed: string[];
   bytesBefore: number;
   bytesAfter: number;
+  recognition: RecognitionResult;
 }
 
 type State =
@@ -21,7 +26,7 @@ type State =
   | { kind: "done"; photo: UploadedPhoto }
   | { kind: "error"; message: string };
 
-export function MealPhotoUpload() {
+export function MealPhotoUpload({ onLogged }: { onLogged?: () => void }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<string | null>(null);
@@ -115,7 +120,7 @@ export function MealPhotoUpload() {
               <span className="h-1.5 w-1.5 rounded-full bg-accent-green animate-blink [animation-delay:0.2s]" />
               <span className="h-1.5 w-1.5 rounded-full bg-accent-green animate-blink [animation-delay:0.4s]" />
             </span>
-            Removing location data…
+            Removing location data, then estimating…
           </p>
         </div>
       ) : null}
@@ -171,6 +176,16 @@ export function MealPhotoUpload() {
               {(state.photo.bytesAfter / 1_000_000).toFixed(1)}MB stored
             </dd>
           </dl>
+
+          <MealConfirm
+            recognition={state.photo.recognition}
+            photoPathname={state.photo.pathname}
+            onLogged={() => {
+              releasePreview();
+              setState({ kind: "idle" });
+              onLogged?.();
+            }}
+          />
 
           <label
             htmlFor="meal-photo-input"

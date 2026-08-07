@@ -3,10 +3,14 @@ import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { recognizeFood } from "@/lib/food/recognize";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
 import { assertNoResidualMetadata, MAX_PHOTO_BYTES, stripImageMetadata } from "@/lib/photo/strip-metadata";
 
 export const dynamic = "force-dynamic";
+// Strip + private store + a vision call. The default 10s is not enough headroom
+// for the model leg, and a timeout here would look to the user like a lost photo.
+export const maxDuration = 45;
 
 /**
  * Upload a meal photo.
@@ -99,6 +103,12 @@ export async function POST(request: NextRequest) {
     contentType: file.type || `image/${result.format}`,
   });
 
+  // Recognition runs on the *stripped* bytes, so the photo's GPS never reaches
+  // a third-party model. It is deliberately not allowed to fail the upload: the
+  // photo is already stored and clean, and a model outage should downgrade the
+  // user to typing the meal in, not lose their photo.
+  const recognition = await recognizeFood(result.data, `image/${result.format}`);
+
   return NextResponse.json({
     // Deliberately the pathname, not blob.url: a private blob URL is not
     // publicly fetchable, and returning it would invite a broken <img src>.
@@ -106,5 +116,6 @@ export async function POST(request: NextRequest) {
     removed: result.removed,
     bytesBefore: result.bytesBefore,
     bytesAfter: result.bytesAfter,
+    recognition,
   });
 }
