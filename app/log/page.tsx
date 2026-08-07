@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { MealPhotoUpload } from "@/components/photo/meal-photo-upload";
+import { LogPanel } from "@/components/photo/log-panel";
 import { auth } from "@/lib/auth";
 
 export const metadata: Metadata = {
@@ -26,20 +26,12 @@ export default async function LogPage() {
         </h1>
       </header>
 
-      <MealPhotoUpload />
-
       {/*
-        Stated plainly rather than implied by a disabled-looking control: the
-        photo is stored and scrubbed, but nothing estimates macros from it yet,
-        so no number is shown. §4.11 forbids implying precision we don't have.
+        The "macro estimation is not built yet" panel that used to sit here has
+        been removed because it is no longer true — a vision model now estimates
+        the photo and the user confirms it before anything is stored.
       */}
-      <section className="rounded-2xl border border-dashed border-base-700 p-4">
-        <h2 className="text-[14px] font-semibold tracking-tight text-ink-mid">Macro estimation</h2>
-        <p className="mt-1 text-[13px] leading-relaxed text-ink-lo">
-          Not built yet. The photo is stored and scrubbed of location data, but nothing reads protein
-          from it, so no estimate is shown rather than a guess.
-        </p>
-      </section>
+      <LogPanel />
 
       <Link
         href="/live"

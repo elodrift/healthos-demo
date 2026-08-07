@@ -114,7 +114,7 @@ export function MealsToday({ refreshKey }: { refreshKey: number }) {
             {/* Low confidence is worth surfacing in the list; medium is the norm
                 and labelling every row would just be noise. */}
             {meal.confidence === "LOW" ? (
-              <span className="shrink-0 font-mono text-[9px] uppercase tracking-[0.1em] text-accent-amber">
+              <span className="shrink-0 rounded border border-base-600 px-1 py-0.5 font-mono text-[9px] uppercase tracking-[0.1em] text-ink-lo">
                 low
               </span>
             ) : null}

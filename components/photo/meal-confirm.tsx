@@ -158,8 +158,13 @@ export function MealConfirm({
         ))}
       </div>
 
+      {/* Deliberately not accent-red: the palette reserves that for the
+          medical safety card, and a save failure must not compete with it. */}
       {error ? (
-        <p role="alert" className="mt-2 text-[12px] leading-relaxed text-accent-red">
+        <p
+          role="alert"
+          className="mt-2 rounded-lg border border-base-600 bg-base-900 p-2.5 text-[12px] leading-relaxed text-ink-mid"
+        >
           {error}
         </p>
       ) : null}

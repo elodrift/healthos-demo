@@ -200,7 +200,7 @@ export function MealPhotoUpload({ onLogged }: { onLogged?: () => void }) {
         <div className="mt-4">
           <p
             role="alert"
-            className="rounded-xl border border-accent-red/40 bg-accent-red/5 p-3 text-[13px] leading-relaxed text-ink-mid"
+            className="rounded-xl border border-base-600 bg-base-900 p-3 text-[13px] leading-relaxed text-ink-mid"
           >
             {state.message}
           </p>
