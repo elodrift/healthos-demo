@@ -50,12 +50,16 @@ inside.
 
 v0 authored an entire community dataset — venue names, log counts, kcal ranges —
 with zero markers, including real restaurant names attached to invented
-nutrition numbers. Both were fixed: see the banner at the top of
-`lib/fixtures/community.ts`.
+nutrition numbers.
 
-Place names in fixtures are now deliberately descriptive ("Wok stall — north
-lane") and **must stay that way**. The demo must never make a factual-looking
-nutritional claim about a business that exists.
+`lib/fixtures/` has since been deleted with the demo (§4), so the specific file
+is gone and there is currently no fixture data in the app. The rule survives it
+and is the reason this section stays: **never attach an invented nutritional
+number to a business that exists.** If community features return, place names
+must be descriptive ("Wok stall — north lane"), not real venues.
+
+The generalised form now applies to model output instead of fixtures: an
+estimate is labelled as an estimate, with its confidence, or it is not shown.
 
 ### 2.3 An external design audit does not outrank the spec
 
@@ -208,6 +212,25 @@ Two consequences worth keeping:
   trips, measured at 22s against a rate-limited gateway — past the route budget,
   so the user would see a timeout instead of the graceful "type it in" fallback.
 
+**`disallowPromptTraining: true` is not decoration — do not remove it.** The AI
+Gateway "does not route based on the training data policy of providers" by
+default, and its docs state that where Vercel has no agreement with a provider it
+*assumes that provider trains on your data*. Without the flag, photographs of
+users' meals — and their kitchens, hands, and dining companions — are training
+data by default. The opt-out is free.
+
+It can fail closed: if no compliant provider serves a model, the request returns
+`400 no_providers_available` rather than quietly routing to a training provider.
+That is the intended behaviour — the chain tries the next model, and if none
+qualify the user types the meal in. Measured: `gemini-2.5-flash` and
+`gemini-2.5-flash-lite` both serve requests with the flag on. `gpt-4o-mini`
+returns 429 with it and 200 without, which is a rate limit on the compliant
+route rather than a policy refusal — it was already the unreliable last resort.
+
+If you ever loosen this, the privacy page's "may only be handled by providers
+that do not use it to train their models" becomes a false statement about
+medical-adjacent data. Change both or neither.
+
 To re-measure after a tier change, run the recognition path directly against a
 real photo without going through the browser:
 
@@ -218,6 +241,13 @@ npx tsx --env-file-if-exists=/vercel/share/.env.project \
 
 It prints the chosen model, so it tells you which entry in `MODELS` actually
 answered rather than which one you hoped would.
+
+**Run it twice on the same photo.** The identical steak image returned 1000 kcal
+/ 80 g protein on one call and 780 / 75 on the next — same model, same bytes,
+~20% apart. That is not a bug to chase; it is the actual precision of a photo
+estimate, and it is the strongest available argument for why the confirm step
+exists and why every row carries `estimated: true`. If anyone proposes
+auto-logging the model's number, reproduce this first.
 
 If paid credits are added, promote `google/gemini-3.6-flash` to the front of
 `MODELS`; nothing else needs to change. Verify the degraded path by temporarily
@@ -240,9 +270,10 @@ implementation consequence that is easy to break by accident.
 - **Community data narrows estimates; it never overrides a rule.** A dish that
   trips a bloodwork ceiling still trips it at 412 logs.
 - **Uncertainty is sometimes irreducible.** Some dishes' variance is the user's
-  own portion. More community data cannot fix those, and the UI must not imply
-  it can — see `tightestVenue()`, which returns `null` rather than claim a
-  benefit that is not in the numbers.
+  own portion, and no amount of extra data fixes that. The UI must not imply it
+  can. This used to be enforced by `tightestVenue()` returning `null`; that code
+  went with the demo, and the live equivalent is `recognize.ts` returning
+  `unavailable` or `implausible` instead of a number it cannot stand behind.
 
 ## 4. Where things are
 
@@ -348,6 +379,15 @@ meal does not yet change the next proposal. That is the obvious next seam.
   The fixture has to be reachable over HTTP, so stage it in `public/` and
   delete it afterwards — it must not ship. `scripts/make-dirty-fixture.ts`
   generates a photo carrying real EXIF/GPS for this purpose.
-- Fixture arithmetic is checked, not trusted — venue log counts sum to each dish
-  total. Keep it that way; a demo arguing about uncertainty cannot afford
-  arithmetic that does not hold.
+- Arithmetic shown to the user is checked, not trusted. This used to mean fixture
+  venue counts summing to their dish totals; with the fixtures gone it means the
+  day's logged total must be the sum of its rows, and the model's per-item macros
+  must sum to the totals first shown on the confirm card. Note the asymmetry: once
+  the user edits a field, their number wins and the items are *expected* to stop
+  summing — the edit is the whole point of the step (§4.12), so do not "fix" that
+  by recomputing over them. An app whose argument is honest uncertainty cannot
+  afford arithmetic that does not hold, nor a confirm step that quietly overrides
+  the person confirming.
+- Test data goes in and comes back out. Verifying the food loop writes real rows
+  to the real Neon database under your own account; delete them when you are done
+  rather than leaving your dashboard showing meals you never ate.

@@ -118,6 +118,20 @@ export async function recognizeFood(image: Buffer, mediaType: string): Promise<R
         // instead of the "type it in yourself" fallback. One attempt each keeps
         // the whole chain inside a few seconds.
         maxRetries: 1,
+        // Not optional for this app. The gateway "does not route based on the
+        // training data policy of providers" by default, and assumes a provider
+        // trains on your data unless it has an agreement saying otherwise — so
+        // without this flag, photographs of users' meals (and their kitchens,
+        // hands, and dining companions) are training data. It costs nothing.
+        //
+        // The tradeoff is real and deliberate: if no compliant provider serves a
+        // model, that request fails with 400 no_providers_available rather than
+        // silently routing to a training provider. That is the correct failure —
+        // the chain moves to the next model, and if none qualify the user is
+        // asked to type the meal in. Privacy fails closed, not open.
+        providerOptions: {
+          gateway: { disallowPromptTraining: true },
+        },
         system: SYSTEM,
         messages: [
           {

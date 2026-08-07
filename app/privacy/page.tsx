@@ -45,10 +45,11 @@ const collected = [
     label: "Meals you log",
     body: "Descriptions, times, photos you choose to upload, and the estimated protein, carbohydrate, fat and energy derived from them.",
   },
-  {
-    label: "Baseline documents",
-    body: "Any bloodwork, body-composition or scan files you upload yourself. These are optional; the app works without them.",
-  },
+  // A "Baseline documents" entry (bloodwork, body-composition, scan files) used
+  // to sit here. There is no such upload in the app, so the policy was claiming
+  // to hold medical documents it cannot receive. A privacy policy is the last
+  // place to describe an intended feature: restore this only alongside the
+  // upload itself.
   {
     label: "Your goal and constraints",
     body: "Your objective, target date, training schedule, food preferences and similar answers given during onboarding.",
@@ -161,10 +162,25 @@ export default function PrivacyPage() {
         <Section title="Where it is stored">
           <p>
             Account details, wearable metrics, plans and meal entries are stored in a Neon
-            PostgreSQL database. Uploaded photos and documents are stored in Vercel Blob under
-            private access, meaning they are not publicly listable. The app is hosted on Vercel.
-            All three providers encrypt data at rest and in transit, and act as processors on the
+            PostgreSQL database. Uploaded photos are stored in Vercel Blob under private access,
+            meaning they are not publicly listable. The app is hosted on Vercel. All three
+            providers encrypt data at rest and in transit, and act as processors on the
             operator&apos;s behalf.
+          </p>
+          <p className="mt-3">
+            One further recipient, because estimating a meal from a photo cannot be done on this
+            server: when you upload a meal photo it is sent to a third-party vision model
+            (currently Google or OpenAI, reached through the Vercel AI Gateway) to produce the
+            estimate you are then asked to confirm. It is sent <strong>after</strong> EXIF
+            metadata is stripped, so no GPS coordinates leave with it, and it is sent without your
+            name, email or account identifier — the model receives an image and nothing else.
+          </p>
+          <p className="mt-3">
+            Each such request is marked so that it may only be handled by providers that do not use
+            it to train their models. If no provider will accept it on those terms, the request is
+            refused rather than sent on weaker ones, and the app asks you to type the meal in
+            instead. The same applies if no model can be reached at all: you are asked to enter the
+            meal yourself, and no estimate is invented.
           </p>
           <p className="mt-3">
             Your WHOOP access and refresh tokens are stored server-side so that syncing can
