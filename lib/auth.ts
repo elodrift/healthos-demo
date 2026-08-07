@@ -35,6 +35,20 @@ export const auth = betterAuth({
     autoSignIn: true,
   },
   trustedOrigins: [
+    // Better Auth rejects with "Invalid origin" for anything not listed here.
+    // In the v0 sandbox the browser reaches the app through a rotating proxy
+    // host (https://sb-<id>.vercel.run) — NOT localhost, which is what the
+    // dev server binds to. Measured from the actual rejection, not assumed.
+    // Wildcards are supported (see better-auth/dist/auth/trusted-origins),
+    // so these patterns cover the proxy without trusting arbitrary origins.
+    // Development only: production uses the explicit URLs below.
+    ...(process.env.NODE_ENV === "development"
+      ? [
+          "https://*.vercel.run",
+          "https://*.v0.build",
+          `http://localhost:${process.env.PORT ?? 3000}`,
+        ]
+      : []),
     ...(process.env.V0_RUNTIME_URL ? [process.env.V0_RUNTIME_URL] : []),
     ...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []),
     ...(process.env.VERCEL_PROJECT_PRODUCTION_URL
