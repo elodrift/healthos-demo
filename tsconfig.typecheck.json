@@ -1,0 +1,18 @@
+{
+  "//": [
+    "Config for `npm run typecheck`. Exists because `next build` rewrites",
+    "tsconfig.json on every run and re-adds '.next/types/**/*.ts', so excluding",
+    ".next there is always undone.",
+    "",
+    "Why exclude .next at all: Next generates one type file per route under",
+    ".next/types but never prunes it when a route is deleted. A removed page",
+    "leaves behind a type file importing a module that no longer exists, which",
+    "reports as a permanent TS2307 that no source change can fix. A typecheck",
+    "of the source tree must describe the source tree.",
+    "",
+    "Route types are still validated: `next build` type-checks them itself."
+  ],
+  "extends": "./tsconfig.json",
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", ".next"]
+}

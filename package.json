@@ -6,24 +6,42 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test:planner": "tsx scripts/test-planner.ts",
+    "test:strip": "tsx scripts/test-strip-metadata.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "verify": "npm run typecheck && npm run test:planner && npm run test:strip && npm run test:live",
+    "test:live": "tsx scripts/test-live-day.ts",
+    "verify:build": "npm run verify && npm run build"
   },
   "dependencies": {
+    "@types/leaflet": "^1.9.22",
+    "@vercel/blob": "^2.7.0",
+    "ai": "^7.0.55",
+    "better-auth": "^1.6.26",
+    "drizzle-orm": "^0.45.2",
+    "framer-motion": "^11.11.9",
+    "leaflet": "^1.9.4",
     "next": "14.2.35",
+    "pg": "^8.22.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "framer-motion": "^11.11.9",
+    "react-leaflet": "^4.2.1",
+    "swr": "^2.5.0",
+    "zod": "^4.4.3",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
+    "@types/pg": "^8.20.4",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
-    "typescript": "^5.6.3",
-    "tailwindcss": "^3.4.13",
-    "postcss": "^8.4.47",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.35"
+    "eslint-config-next": "14.2.35",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "tsx": "^4.23.10",
+    "typescript": "^5.6.3"
   }
 }
