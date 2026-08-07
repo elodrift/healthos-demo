@@ -42,7 +42,13 @@ export function TimelineScrubber({
               disabled={!reached}
               aria-label={reached ? `Replay from ${t}` : `${t} — not reached yet`}
               aria-current={i === activeStop ? "step" : undefined}
-              className={`-mt-3 flex min-h-[34px] flex-col items-center gap-1 rounded px-1.5 py-1 font-mono text-[10px] tabular-nums transition disabled:cursor-default ${
+              /*
+               * 44px minimum, up from 34px. The hit area is deliberately taller
+               * than the ink: it starts above the dot (-mt-3) and extends past
+               * the label, so the whole dot-plus-time column is tappable rather
+               * than just the 8px dot. Thumbs are not cursors.
+               */
+              className={`-mt-3 flex min-h-[44px] flex-col items-center justify-center gap-1 rounded px-2 py-1 font-mono text-[10px] tabular-nums transition disabled:cursor-default ${
                 i === activeStop
                   ? "text-accent-green"
                   : reached

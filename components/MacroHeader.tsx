@@ -26,6 +26,19 @@ function Tile({
   const estPct = target > 0 ? Math.min(pct, (estimated / target) * 100) : 0;
   const confirmedPct = Math.max(0, pct - estPct);
 
+  /*
+   * An overage used to be invisible: the number stayed brand-green and the bar
+   * clamped at 100%, so 2900 against a 2700 target looked identical to hitting
+   * it exactly. Green is the app's "this is fine" signal, so that read as
+   * approval of the opposite of what happened.
+   *
+   * Over target now drops to neutral ink and the bar shows a marker at the
+   * boundary. Deliberately NOT red — red is reserved exclusively for the medical
+   * never-suspends card (DEMO_SPEC §1.6.6). Being over on carbs is information,
+   * not a rule breach, and the two must not look alike.
+   */
+  const over = target > 0 && consumed > target;
+
   return (
     <div className="min-w-0 flex-1 rounded-xl border border-base-700 bg-base-850/80 px-2.5 py-1.5">
       <div className="flex items-center gap-1">
@@ -43,13 +56,23 @@ function Tile({
         ) : null}
       </div>
       {/* stacked, not inline: three tiles at 390px can't fit "620 / 2700" on one line */}
-      <div className="mt-1 text-[22px] font-semibold leading-none tabular-nums text-accent-green">
+      <div
+        className={`mt-1 text-[22px] font-semibold leading-none tabular-nums ${
+          over ? "text-ink-hi" : "text-accent-green"
+        }`}
+      >
         {Math.round(shownConsumed)}
         {unit}
       </div>
       <div className="mt-0.5 font-mono text-[11px] tabular-nums text-ink-mid">
         / {Math.round(shownTarget)}
         {unit}
+        {over ? (
+          <span className="ml-1 text-ink-lo">
+            (+{Math.round(consumed - target)}
+            {unit})
+          </span>
+        ) : null}
       </div>
       <div
         className="mt-1.5 flex h-1.5 w-full overflow-hidden rounded-full bg-base-700"
@@ -60,15 +83,17 @@ function Tile({
         aria-label={`${label} progress`}
       >
         <motion.div
-          className="h-full bg-accent-green"
+          className={`h-full ${over ? "bg-ink-mid" : "bg-accent-green"}`}
           animate={{ width: `${confirmedPct}%` }}
           transition={{ type: "spring", stiffness: 150, damping: 22 }}
         />
+        {/* hatched = still an estimate, not a confirmed number */}
         <motion.div
           className="h-full"
           style={{
-            backgroundImage:
-              "repeating-linear-gradient(135deg, #3DDC97 0 3px, rgba(61,220,151,0.25) 3px 7px)",
+            backgroundImage: over
+              ? "repeating-linear-gradient(135deg, #98A5BC 0 3px, rgba(152,165,188,0.25) 3px 7px)"
+              : "repeating-linear-gradient(135deg, #3DDC97 0 3px, rgba(61,220,151,0.25) 3px 7px)",
           }}
           animate={{ width: `${estPct}%` }}
           transition={{ type: "spring", stiffness: 150, damping: 22 }}

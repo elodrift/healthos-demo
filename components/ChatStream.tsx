@@ -114,7 +114,12 @@ export function ChatStream() {
             if (beat.kind === "card") {
               return (
                 <div key={beat.id} data-beat>
-                  <CardRenderer card={beat.card} highlighted={highlighted} onHover={onHover} />
+                  <CardRenderer
+                    card={beat.card}
+                    beatId={beat.id}
+                    highlighted={highlighted}
+                    onHover={onHover}
+                  />
                 </div>
               );
             }

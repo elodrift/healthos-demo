@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { CardShell } from "./CardShell";
 import { TargetRevisionCard } from "./TargetRevisionCard";
+import { ProposalsCard } from "./ProposalsCard";
 import type { CardSpec } from "@/lib/fixtures/script-types";
 
 function CheckIcon() {
@@ -21,10 +22,13 @@ function CheckIcon() {
 
 export function CardRenderer({
   card,
+  beatId,
   highlighted,
   onHover,
 }: {
   card: CardSpec;
+  /** the beat that produced this card — keys the user's proposal decision */
+  beatId: string;
   highlighted?: boolean;
   onHover?: (hovering: boolean) => void;
 }) {
@@ -59,18 +63,12 @@ export function CardRenderer({
 
     case "proposals":
       return (
-        <CardShell eyebrow="Two proposals" highlighted={highlighted} onHover={onHover}>
-          <ol className="flex flex-col gap-3">
-            {card.items.map((item, i) => (
-              <li key={item} className="flex gap-3 text-[13px] leading-relaxed text-ink-mid">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-base-600 font-mono text-[11px] text-ink-lo">
-                  {i + 1}
-                </span>
-                {item}
-              </li>
-            ))}
-          </ol>
-        </CardShell>
+        <ProposalsCard
+          beatId={beatId}
+          items={card.items}
+          highlighted={highlighted}
+          onHover={onHover}
+        />
       );
 
     case "meal-push":

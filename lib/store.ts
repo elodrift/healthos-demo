@@ -220,6 +220,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     phoneScreen: "today",
     feedLogged: [],
     joinedPlans: [],
+    chosenProposals: {},
     highlightBeatId: null,
     timer: null,
 
@@ -526,6 +527,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         phoneScreen: "today",
         feedLogged: [],
         joinedPlans: [],
+        chosenProposals: {},
       });
     },
   };

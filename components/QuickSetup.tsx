@@ -12,14 +12,29 @@ import {
   personas,
 } from "@/lib/fixtures/personas";
 
+/*
+ * Three stops, not four: step 1 (goal) folded into step 0, since it was a screen
+ * with nothing to decide. `stops` maps dot position -> real step value so the
+ * skipped index does not leave a dead dot that never lights up.
+ */
+const stops = [0, 2, 3];
+
 function StepDots({ step }: { step: number }) {
+  const active = Math.max(0, stops.indexOf(step));
   return (
-    <div className="flex items-center gap-1.5">
-      {[0, 1, 2, 3].map((i) => (
+    <div
+      className="flex items-center gap-1.5"
+      role="progressbar"
+      aria-valuenow={active + 1}
+      aria-valuemin={1}
+      aria-valuemax={stops.length}
+      aria-label={`Setup step ${active + 1} of ${stops.length}`}
+    >
+      {stops.map((_, i) => (
         <span
           key={i}
           className={`h-1.5 rounded-full transition-all ${
-            i === step ? "w-5 bg-accent-green" : "w-1.5 bg-base-600"
+            i === active ? "w-5 bg-accent-green" : "w-1.5 bg-base-600"
           }`}
         />
       ))}
@@ -106,21 +121,25 @@ export function QuickSetup() {
                   selected={personaId === p.id}
                   onClick={() => {
                     setPersona(p.id);
-                    setStep(1);
+                    setStep(2);
                   }}
                 />
               ))}
             </div>
-          </>
-        ) : null}
 
-        {step === 1 ? (
-          <>
-            <h2 className="text-[22px] font-semibold leading-tight text-ink-hi">Goal and timeframe</h2>
-            <p className="mt-1.5 text-[13px] text-ink-mid">Fixed for the demo — one clear objective.</p>
-            <div className="mt-5 rounded-2xl border border-accent-green/40 bg-base-850 px-4 py-5">
-              <div className="text-[17px] font-semibold text-ink-hi">{goalLabel}</div>
-              <div className="mt-4 h-1.5 rounded-full bg-base-700">
+            {/*
+             * The goal used to be its own step, but it is fixed for the demo —
+             * a whole screen whose only interaction was "Continue" past
+             * information the visitor could not change. It reads as context for
+             * the choice above, so it sits with it, and the step count drops
+             * from four to three.
+             */}
+            <div className="mt-6 rounded-2xl border border-base-700 bg-base-850/60 px-4 py-3.5">
+              <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-lo">
+                Goal · fixed for the demo
+              </div>
+              <div className="mt-1.5 text-[14px] font-semibold text-ink-hi">{goalLabel}</div>
+              <div className="mt-3 h-1.5 rounded-full bg-base-700">
                 <div className="h-full w-[38%] rounded-full bg-accent-green" />
               </div>
               <div className="mt-2 flex justify-between font-mono text-[10px] tabular-nums text-ink-lo">
@@ -128,13 +147,6 @@ export function QuickSetup() {
                 <span>week 16</span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="mt-5 w-full rounded-full bg-accent-green px-5 py-3.5 text-[15px] font-semibold text-base-950 transition hover:brightness-110"
-            >
-              Continue
-            </button>
           </>
         ) : null}
 
