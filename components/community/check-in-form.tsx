@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useRef, useState } from "react";
 import { createCheckIn, type CheckInFormState } from "@/app/actions/community";
 
 const INITIAL: CheckInFormState = {};
@@ -17,9 +17,39 @@ const INITIAL: CheckInFormState = {};
  *   the column default. A user who ignores this form entirely shares nothing.
  */
 export function CheckInForm() {
-  const [state, action, pending] = useActionState(createCheckIn, INITIAL);
+  /*
+   * Submitted through a plain async handler rather than `useActionState`.
+   *
+   * This project is on React 18.3.1, where `useActionState` does not exist —
+   * neither does `react-dom`'s `useFormState` in this build. An earlier draft
+   * used the React 19 hook: it typechecked and it *built*, then threw
+   * "useActionState is not a function" the moment the page rendered. Worth
+   * recording, because it is a case a green build genuinely cannot catch.
+   */
+  const [state, setState] = useState<CheckInFormState>(INITIAL);
+  const [pending, setPending] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [geoState, setGeoState] = useState<"idle" | "asking" | "denied" | "unsupported">("idle");
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    setPending(true);
+    try {
+      const result = await createCheckIn(INITIAL, new FormData(form));
+      setState(result);
+      // Only clear on success, so a rejected submission keeps what was typed.
+      if (result.ok) {
+        form.reset();
+        setCoords(null);
+      }
+    } catch {
+      setState({ error: "Could not save that. Try again." });
+    } finally {
+      setPending(false);
+    }
+  }
 
   function requestLocation() {
     if (!("geolocation" in navigator)) {
@@ -40,7 +70,7 @@ export function CheckInForm() {
   }
 
   return (
-    <form action={action} className="flex flex-col gap-3">
+    <form ref={formRef} onSubmit={onSubmit} className="flex flex-col gap-3">
       <div className="flex flex-col gap-1">
         <label
           htmlFor="placeName"

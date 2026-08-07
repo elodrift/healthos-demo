@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useState } from "react";
 import {
   requestFriend,
   respondToFriend,
@@ -19,8 +19,46 @@ const INITIAL: FriendFormState = {};
  * press, and a disabled Accept button would imply otherwise.
  */
 export function FriendsPanel({ friends }: { friends: FriendRow[] }) {
-  const [state, action, pending] = useActionState(requestFriend, INITIAL);
-  const [responding, startResponding] = useTransition();
+  // Plain async submit rather than `useActionState`: this project is on React
+  // 18.3.1, where that hook does not exist. See the note in check-in-form.tsx.
+  const [state, setState] = useState<FriendFormState>(INITIAL);
+  const [pending, setPending] = useState(false);
+  /*
+   * Tracks which specific request is being answered.
+   *
+   * A single boolean would disable every Accept/Decline button at once, which
+   * reads as "the whole panel is broken" when only one row is in flight. React
+   * 18's `startTransition` is not used here because it does not await an async
+   * callback — the pending state would clear immediately while the write was
+   * still going, so the buttons would re-enable and invite a double-accept.
+   */
+  const [respondingId, setRespondingId] = useState<number | null>(null);
+
+  async function respond(id: number, accept: boolean) {
+    setRespondingId(id);
+    try {
+      await respondToFriend(id, accept);
+    } catch {
+      setState({ error: "Could not update that request. Try again." });
+    } finally {
+      setRespondingId(null);
+    }
+  }
+
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    setPending(true);
+    try {
+      const result = await requestFriend(INITIAL, new FormData(form));
+      setState(result);
+      if (result.ok) form.reset();
+    } catch {
+      setState({ error: "Could not send that request. Try again." });
+    } finally {
+      setPending(false);
+    }
+  }
 
   const incoming = friends.filter((f) => f.incoming);
   const accepted = friends.filter((f) => f.status === "accepted");
@@ -28,7 +66,7 @@ export function FriendsPanel({ friends }: { friends: FriendRow[] }) {
 
   return (
     <div className="flex flex-col gap-5">
-      <form action={action} className="flex flex-col gap-2">
+      <form onSubmit={onSubmit} className="flex flex-col gap-2">
         <label
           htmlFor="friend-email"
           className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo"
@@ -77,16 +115,16 @@ export function FriendsPanel({ friends }: { friends: FriendRow[] }) {
               <div className="flex shrink-0 gap-2">
                 <button
                   type="button"
-                  disabled={responding}
-                  onClick={() => startResponding(() => void respondToFriend(f.id, true))}
+                  disabled={respondingId === f.id}
+                  onClick={() => void respond(f.id, true)}
                   className="rounded bg-accent-green px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-base-950 transition hover:opacity-90 disabled:opacity-50"
                 >
                   Accept
                 </button>
                 <button
                   type="button"
-                  disabled={responding}
-                  onClick={() => startResponding(() => void respondToFriend(f.id, false))}
+                  disabled={respondingId === f.id}
+                  onClick={() => void respond(f.id, false)}
                   className="rounded border border-base-700 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-ink-lo transition hover:text-ink-hi disabled:opacity-50"
                 >
                   Decline
