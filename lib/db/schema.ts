@@ -307,7 +307,13 @@ export const mealLog = pgTable(
     mealSlotId: integer("mealSlotId"),
     loggedAt: timestamp("loggedAt").notNull().defaultNow(),
     description: text("description"),
-    photoUrl: text("photoUrl"),
+    /**
+     * Blob *pathname*, not a URL. The store is private (app/privacy/page.tsx
+     * promises "private access"), so the value returned by put() is not
+     * publicly fetchable. Render it through /api/meal-photo, never as a direct
+     * <img src>.
+     */
+    photoPathname: text("photoPathname"),
     photoWidth: integer("photoWidth"),
     photoHeight: integer("photoHeight"),
     proteinG: real("proteinG"),

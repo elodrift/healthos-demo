@@ -11,7 +11,7 @@
 
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { detectFormat, stripImageMetadata } from "../lib/photo/strip-metadata";
+import { assertNoResidualMetadata, detectFormat, stripImageMetadata } from "../lib/photo/strip-metadata";
 
 let failures = 0;
 function check(label: string, ok: boolean, detail?: unknown) {
@@ -266,6 +266,76 @@ console.log("\n8. Malformed input does not throw");
       threw = true;
     }
     check(`${label} handled without throwing`, !threw);
+  }
+}
+
+/* --- assertNoResidualMetadata ---------------------------------------- *
+ *
+ * This is the upload route's fail-closed gate, so it has to be a real check
+ * and not a function that always returns null. Two directions are asserted:
+ * it must find metadata in a dirty buffer, and find none after stripping.
+ * ------------------------------------------------------------------ */
+{
+  console.log("\nassertNoResidualMetadata:");
+
+  // A hand-built JPEG carrying an APP1/EXIF segment.
+  const dirtyJpeg = Buffer.concat([
+    Buffer.from([0xff, 0xd8]), // SOI
+    Buffer.from([0xff, 0xe1, 0x00, 0x0c]), // APP1, length 12
+    Buffer.from("Exif\0\0", "latin1"),
+    Buffer.from([0x00, 0x00, 0x00, 0x00]),
+    Buffer.from([0xff, 0xda]), // SOS
+    Buffer.from([0x00, 0x00]),
+  ]);
+  check(
+    "detects EXIF in a dirty JPEG",
+    assertNoResidualMetadata(dirtyJpeg, "jpeg") !== null,
+    assertNoResidualMetadata(dirtyJpeg, "jpeg"),
+  );
+  check(
+    "reports clean after stripping that JPEG",
+    assertNoResidualMetadata(stripImageMetadata(dirtyJpeg).data, "jpeg") === null,
+  );
+
+  // WebP with an EXIF chunk.
+  const exifChunk = Buffer.concat([
+    Buffer.from("EXIF", "latin1"),
+    (() => {
+      const b = Buffer.alloc(4);
+      b.writeUInt32LE(4, 0);
+      return b;
+    })(),
+    Buffer.from([0x01, 0x02, 0x03, 0x04]),
+  ]);
+  const webpBody = Buffer.concat([Buffer.from("VP8 ", "latin1"), Buffer.from([0x04, 0x00, 0x00, 0x00]), Buffer.from([0, 0, 0, 0]), exifChunk]);
+  const dirtyWebp = Buffer.concat([
+    Buffer.from("RIFF", "latin1"),
+    (() => {
+      const b = Buffer.alloc(4);
+      b.writeUInt32LE(4 + webpBody.length, 0);
+      return b;
+    })(),
+    Buffer.from("WEBP", "latin1"),
+    webpBody,
+  ]);
+  check("detects EXIF in a dirty WebP", assertNoResidualMetadata(dirtyWebp, "webp") !== null);
+  check(
+    "reports clean after stripping that WebP",
+    assertNoResidualMetadata(stripImageMetadata(dirtyWebp).data, "webp") === null,
+  );
+
+  // Every real fixture must come out clean by the verifier's own reckoning.
+  const fixtureDir = join(process.cwd(), "public", "feed");
+  for (const name of readdirSync(fixtureDir).filter((f) => f.endsWith(".png")).slice(0, 4)) {
+    const raw = readFileSync(join(fixtureDir, name));
+    const format = detectFormat(raw);
+    if (format !== "jpeg" && format !== "png" && format !== "webp") continue;
+    const stripped = stripImageMetadata(raw);
+    check(
+      `${name}: verifier reports clean after strip`,
+      assertNoResidualMetadata(stripped.data, format) === null,
+      assertNoResidualMetadata(stripped.data, format),
+    );
   }
 }
 

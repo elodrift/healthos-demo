@@ -28,6 +28,16 @@
 /** Formats we can parse well enough to guarantee removal. */
 export type ImageFormat = "jpeg" | "png" | "webp" | "heic" | "gif" | "unknown";
 
+/**
+ * Upload ceiling for meal photos.
+ *
+ * Serverless request bodies cap out around 4.5MB. The strip has to run on the
+ * server (a client-side strip is bypassable by anything posting straight to the
+ * endpoint), so photos cannot route around this via direct-to-Blob upload.
+ * 4MB leaves headroom for the multipart envelope.
+ */
+export const MAX_PHOTO_BYTES = 4_000_000;
+
 export interface StripResult {
   /** The cleaned image. Identical to the input when there was nothing to remove. */
   data: Buffer;
@@ -278,6 +288,67 @@ function stripWebp(buf: Buffer): { data: Buffer; removed: string[] } {
 /* ------------------------------------------------------------------ *
  * Entry point
  * ------------------------------------------------------------------ */
+
+/**
+ * Verify a stripped buffer really is clean, instead of trusting that it is.
+ *
+ * The strip functions above walk the container structurally, so a malformed or
+ * adversarial file could in principle cause an early verbatim copy that keeps a
+ * metadata segment. This re-scans the output and names anything that survived.
+ *
+ * Returns null when clean, or a description of what remains. The caller must
+ * fail closed on a non-null result: a photo we cannot prove is clean must not
+ * be stored, because app/privacy/page.tsx promises that it is.
+ */
+export function assertNoResidualMetadata(buf: Buffer, format: ImageFormat): string | null {
+  if (format === "jpeg") {
+    let offset = 2;
+    while (offset < buf.length - 1) {
+      if (buf[offset] !== 0xff) break;
+      let markerAt = offset;
+      while (markerAt < buf.length && buf[markerAt] === 0xff) markerAt++;
+      const marker = buf[markerAt];
+      if (marker === 0xda || marker === 0xd9) break; // scan data / EOI
+      if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+        offset = markerAt + 1;
+        continue;
+      }
+      const lengthAt = markerAt + 1;
+      if (lengthAt + 2 > buf.length) break;
+      const label = JPEG_STRIP_MARKERS.get(marker);
+      if (label) return `JPEG segment survived: ${label}`;
+      offset = lengthAt + buf.readUInt16BE(lengthAt);
+    }
+    return null;
+  }
+
+  if (format === "png") {
+    let offset = 8;
+    while (offset + 8 <= buf.length) {
+      const dataLength = buf.readUInt32BE(offset);
+      const type = buf.subarray(offset + 4, offset + 8).toString("latin1");
+      const label = PNG_STRIP_CHUNKS.get(type);
+      if (label) return `PNG chunk survived: ${label}`;
+      offset = offset + 12 + dataLength;
+      if (type === "IEND") break;
+    }
+    return null;
+  }
+
+  if (format === "webp") {
+    let offset = 12;
+    while (offset + 8 <= buf.length) {
+      const fourcc = buf.subarray(offset, offset + 4).toString("latin1");
+      const size = buf.readUInt32LE(offset + 4);
+      if (fourcc === "EXIF" || fourcc === "XMP ") return `WebP chunk survived: ${fourcc}`;
+      offset = offset + 8 + size + (size % 2);
+    }
+    return null;
+  }
+
+  // Unsupported formats never reach storage, so there is nothing to verify.
+  return null;
+}
 
 export function stripImageMetadata(input: Buffer): StripResult {
   const format = detectFormat(input);
