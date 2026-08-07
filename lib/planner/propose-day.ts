@@ -71,6 +71,26 @@ export type ProposedSlot = {
   sortOrder: number;
 };
 
+/**
+ * The day's whole-day macro commitment, for comparing against what was logged.
+ *
+ * `proteinKind` is the load-bearing field. On a low-control day the planner
+ * defends the protein *floor* instead of prescribing the target, and those are
+ * different claims: clearing a 150g floor is a success, while falling 55g short
+ * of a 205g target is not. A progress bar that showed one number without saying
+ * which kind it was would be §4.11 exactly — an assumption wearing a
+ * measurement's clothes.
+ *
+ * Carbs and kcal stay null on imprecise days rather than falling back to
+ * something softer, because there is no honest "floor" for them here.
+ */
+export type DayTarget = {
+  proteinG: number | null;
+  proteinKind: "TARGET" | "FLOOR";
+  carbG: number | null;
+  kcal: number | null;
+};
+
 export type DayProposal = {
   wakeTime: string;
   sleepTime: string;
@@ -78,6 +98,12 @@ export type DayProposal = {
   trainingEnd: string | null;
   trainingType: string | null;
   slots: ProposedSlot[];
+  /**
+   * The day total. Deliberately not the sum of the slot targets: those are
+   * per-slot rounded, so adding them back up drifts from the figure the planner
+   * actually committed to.
+   */
+  dayTarget: DayTarget;
   /** Human-readable reasons, so the proposal can be argued with. */
   rationale: string[];
   evidence: Evidence;
@@ -311,6 +337,20 @@ export function proposeDay(args: {
     trainingEnd: training?.end ?? null,
     trainingType: training?.type ?? null,
     slots,
+    dayTarget: {
+      // proteinTotal is already the target-or-floor decision made above; reusing
+      // it keeps one source of truth rather than re-deriving the same rule.
+      proteinG: proteinTotal ?? null,
+      // Not simply `precise ? TARGET : FLOOR`. On an imprecise day the figure
+      // falls back to the target when no floor is set, and calling that a floor
+      // would mislabel the very number the label exists to qualify.
+      proteinKind:
+        !precise && profile.proteinFloorG !== null && profile.proteinFloorG !== undefined
+          ? "FLOOR"
+          : "TARGET",
+      carbG: precise ? (profile.carbTargetG ?? null) : null,
+      kcal: precise ? (profile.kcalTarget ?? null) : null,
+    },
     rationale,
     evidence,
     controlLevel: control,

@@ -165,6 +165,73 @@ console.log("\n9. Malformed profile times fall back instead of poisoning the pla
   }
 }
 
+console.log("\n10. Day target — the figure /live compares logged meals against");
+{
+  const p = proposeDay({ signal: measured, profile: fullControl, training: null });
+  check("full control -> TARGET", p.dayTarget.proteinKind === "TARGET", p.dayTarget.proteinKind);
+  check("full control -> uses the target", p.dayTarget.proteinG === 160, String(p.dayTarget.proteinG));
+  check("full control -> carbs present", p.dayTarget.carbG === 240, String(p.dayTarget.carbG));
+  check("full control -> kcal present", p.dayTarget.kcal === 2400, String(p.dayTarget.kcal));
+
+  // The day total must be the planner's own commitment, not the sum of the
+  // per-slot rounded figures. 160/4 divides cleanly; 160/3 does not, so this is
+  // the case that would expose a UI re-adding the slots.
+  const odd = proposeDay({
+    signal: measured,
+    profile: { ...fullControl, mealsPerDay: 3 },
+    training: null,
+  });
+  const slotSum = odd.slots.reduce((n, s) => n + (s.targetProteinG ?? 0), 0);
+  check(
+    "day total stays exact when slots round (160/3)",
+    odd.dayTarget.proteinG === 160 && slotSum !== 160,
+    `day=${odd.dayTarget.proteinG} slotSum=${slotSum}`,
+  );
+
+  // Low control defends the floor, and the label must say so.
+  const minimal = proposeDay({
+    signal: measured,
+    profile: { ...fullControl, controlLevel: "MINIMAL" },
+    training: null,
+  });
+  check("minimal -> FLOOR", minimal.dayTarget.proteinKind === "FLOOR", minimal.dayTarget.proteinKind);
+  check("minimal -> floor figure (110)", minimal.dayTarget.proteinG === 110, String(minimal.dayTarget.proteinG));
+  check("minimal -> no carb target", minimal.dayTarget.carbG === null, String(minimal.dayTarget.carbG));
+  check("minimal -> no kcal target", minimal.dayTarget.kcal === null, String(minimal.dayTarget.kcal));
+
+  // The mislabel trap: an imprecise day with no floor set falls back to the
+  // target, so it must not then be presented as a floor.
+  const noFloor = proposeDay({
+    signal: measured,
+    profile: { ...fullControl, controlLevel: "MINIMAL", proteinFloorG: null },
+    training: null,
+  });
+  check(
+    "imprecise + no floor -> labelled TARGET, not FLOOR",
+    noFloor.dayTarget.proteinKind === "TARGET",
+    noFloor.dayTarget.proteinKind,
+  );
+  check(
+    "imprecise + no floor -> falls back to the target figure",
+    noFloor.dayTarget.proteinG === 160,
+    String(noFloor.dayTarget.proteinG),
+  );
+
+  // Null, never 0. "Your target is 0g protein" is a worse lie than no number.
+  const empty = proposeDay({
+    signal: nothing,
+    profile: {
+      ...fullControl,
+      proteinTargetG: null,
+      proteinFloorG: null,
+      carbTargetG: null,
+      kcalTarget: null,
+    },
+    training: null,
+  });
+  check("no targets set -> null, never 0", empty.dayTarget.proteinG === null, String(empty.dayTarget.proteinG));
+}
+
 console.log(
   failures === 0
     ? "\nAll planner checks passed.\n"

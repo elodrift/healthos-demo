@@ -5,6 +5,7 @@ import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { buildLiveDay } from "@/lib/live/build-day";
 import { DayProposalView } from "@/components/live/day-proposal";
+import { LoggedAgainstTarget } from "@/components/live/logged-against-target";
 
 export const metadata: Metadata = {
   title: "Live mode — HealthOS",
@@ -58,11 +59,25 @@ export default async function LivePage() {
       </div>
 
       {result.status === "OK" ? (
-        <DayProposalView
-          proposal={result.proposal}
-          fromCache={result.fromCache}
-          cachedDay={result.cachedDay}
-        />
+        <>
+          {/*
+            Logged-versus-planned sits above the rail deliberately: it is the
+            question someone opens this screen to answer, and the plan below is
+            what they do about the answer.
+          */}
+          <LoggedAgainstTarget dayTarget={result.proposal.dayTarget} />
+          <Link
+            href="/log"
+            className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-base-700 bg-base-900 px-4 text-[14px] font-semibold text-ink-hi"
+          >
+            Log a meal
+          </Link>
+          <DayProposalView
+            proposal={result.proposal}
+            fromCache={result.fromCache}
+            cachedDay={result.cachedDay}
+          />
+        </>
       ) : (
         <BlockedState result={result} />
       )}
