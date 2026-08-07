@@ -52,6 +52,28 @@ Place names in fixtures are now deliberately descriptive ("Wok stall — north
 lane") and **must stay that way**. The demo must never make a factual-looking
 nutritional claim about a business that exists.
 
+### 2.3 An external design audit does not outrank the spec
+
+A Modernist redesign audit was delivered as a PDF (dropped in `.v0/feedback/`,
+gitignored). Its UX findings were sharp and several are now implemented — but
+its visual direction contradicted `DEMO_SPEC.md §1.5`, *"Presentation layer —
+LOCKED to the Journey Frames mockup"*, and it said so on page 2: it had been
+written **without** the journey-frames reference, which is in the repo at
+`design/journey-frames.pdf`.
+
+The founder's ruling, on the record:
+
+- **Adopt** the non-conflicting UX fixes only.
+- **Reject** the light theme, Archivo, zero-radius, wizard-replaces-chat, and
+  engine-demoted-to-a-drawer changes. Dark, chat-first, engine-visible stands.
+- **Red stays medical-only.** The audit used red for its primary CTA while its
+  own page 6 said *"red never means bad performance, only that a medical rule is
+  in view."* `DEMO_SPEC §1.6.6` agrees. The audit lost to itself here.
+
+The lesson generalises: a document arriving later, with more confidence and
+better typography, is still not canonical. Check it against the two docs in
+`docs/` and flag the conflict instead of implementing the newest thing you read.
+
 ## 3. Product rules that constrain code, not just copy
 
 These come from the DNA. They are listed here because each one has a concrete
@@ -104,6 +126,23 @@ surface:
 - `joinPlan` records a plan and emits **no** `FOOD_LOGGED` event. Joining must
   never move the macro header. This is §4.12 applied to a future meal and is
   worth an explicit test if you refactor the store.
+- **Proposals are selectable** (`components/cards/ProposalsCard.tsx`). The card
+  used to be a read-only list under the words "your call", so the §4.12 promise
+  was made and then not honoured — there was nothing to dispose *with*. Choosing
+  writes `chosenProposals[beatId]` and shows a receipt. Like `joinPlan`, it emits
+  no event and moves no macro: committing to a plan is not eating.
+- **Over target reads neutral, never red** (`MacroHeader.tsx`). Consumed used to
+  stay brand-green while the bar clamped at 100%, so 224g against a 205g target
+  looked exactly like hitting it. It now drops to `ink-hi` with a `(+19g)` delta.
+  Deliberately not red — being over on carbs is information, a medical rule
+  breach is not, and the two must not look alike.
+- Scrubber stops are 44px minimum (were 34px), and setup is three steps, not
+  four: the goal step had nothing to decide on it.
+
+One audit finding was **not** real: it claimed `scrollIntoView` fought user
+scroll. There was no `scrollIntoView` in the codebase — `ChatStream` uses a
+container-scoped `scrollTo` with a deliberate observer-loop guard. Verify claims
+against the code before you act on them, including the ones in this file.
 
 Known-deliberate gaps: two dishes have no venue data, because not every dish
 needs every feature. The map covers one city; friends elsewhere are surfaced as
