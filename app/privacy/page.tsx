@@ -201,9 +201,17 @@ export default function PrivacyPage() {
 
         <Section title="Your controls">
           <p>
-            You can disconnect WHOOP at any time from inside the app, which deletes the stored
-            tokens and stops all further syncing. You can also revoke access directly from your
-            WHOOP account settings, which has the same effect.
+            You can disconnect WHOOP at any time from the connection screen inside the app. This
+            deletes the stored tokens and asks WHOOP to revoke the authorisation, so the app can
+            read nothing further. If WHOOP cannot confirm the revocation, the app tells you so and
+            asks you to remove it under Apps in your WHOOP account settings — it does not report a
+            clean disconnect it could not verify. Revoking from WHOOP&apos;s settings directly has
+            the same effect.
+          </p>
+          <p className="mt-3">
+            Disconnecting stops all future collection but leaves recovery and sleep already synced
+            in your history, because past plans were built from it. Ask at the address below to have
+            that deleted too.
           </p>
           <p className="mt-3">
             You can ask for a copy of your data, correction of anything inaccurate, or deletion of

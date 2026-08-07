@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { wearableConnection } from "@/lib/db/schema";
+import { DisconnectWhoopButton } from "@/components/whoop/disconnect-button";
 
 export const metadata: Metadata = {
   title: "Connect WHOOP — HealthOS",
@@ -149,6 +150,19 @@ export default async function ConnectWhoopPage({
       >
         {conn ? "Reconnect WHOOP" : "Connect WHOOP"}
       </a>
+
+      {/*
+        Rendered unconditionally, with `connected` passed in, rather than wrapped
+        in `{conn ? ... : null}`.
+
+        The conditional version was a real bug: disconnecting calls
+        revalidatePath, the server re-renders with conn === null, the component
+        unmounts, and the React state holding the result message is destroyed. The
+        user saw no confirmation at all — and the message that matters most, "we
+        could not confirm revocation at WHOOP, so remove it there yourself", was
+        the one silently discarded. Keeping the element mounted preserves it.
+      */}
+      <DisconnectWhoopButton connected={Boolean(conn)} />
 
       <p className="mt-3 text-center text-[12px] leading-relaxed text-ink-lo">
         You&apos;ll be taken to WHOOP to approve access.{" "}

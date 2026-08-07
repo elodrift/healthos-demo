@@ -232,6 +232,74 @@ export async function getValidAccessToken(userId: string): Promise<string> {
   }
 }
 
+/**
+ * Disconnect WHOOP: revoke the grant at WHOOP, then delete our stored tokens.
+ *
+ * Two things make this more than a row delete.
+ *
+ * First, deleting our row alone would leave the grant **live on WHOOP's side** —
+ * the app would still be listed as authorised in the user's WHOOP account, and
+ * the tokens would keep working until they expired. So we call WHOOP's
+ * revocation endpoint (`DELETE /v2/user/access`, which is WHOOP's own scheme
+ * rather than RFC 7009, and answers 204) before deleting anything locally.
+ *
+ * Second, the local delete happens **whether or not** the remote revoke
+ * succeeds. The user asked us to stop holding their credentials; continuing to
+ * hold them because a network call failed would be the wrong way round. But the
+ * failure is returned rather than swallowed, because "disconnected" and
+ * "disconnected here, still authorised at WHOOP" are different states and the
+ * user needs to know which one they are in so they can finish the job in WHOOP's
+ * own settings.
+ */
+export async function revokeWhoopAccess(
+  userId: string,
+): Promise<{ localDeleted: boolean; remoteRevoked: boolean; reason?: string }> {
+  let remoteRevoked = false;
+  let reason: string | undefined;
+
+  try {
+    // Deliberately uses getValidAccessToken: revoking needs a *live* token, so
+    // an expired one is refreshed first. Without this, a user returning after a
+    // day would silently fail to revoke at WHOOP.
+    const token = await getValidAccessToken(userId);
+    const res = await fetch(`${WHOOP_API}/v2/user/access`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+
+    if (res.status === 204 || res.ok) {
+      remoteRevoked = true;
+    } else if (res.status === 401 || res.status === 403) {
+      // The token is already rejected, so there is nothing left to revoke. Not
+      // an error worth alarming the user about, but not a confirmed revoke
+      // either — say so rather than claiming success.
+      reason = "WHOOP had already invalidated this authorisation.";
+    } else {
+      const detail = await res.text().catch(() => "");
+      reason = `WHOOP returned ${res.status}. ${detail.slice(0, 140)}`.trim();
+    }
+  } catch (err) {
+    if (err instanceof WhoopNotConnectedError) {
+      // Nothing stored, so nothing to revoke or delete.
+      return { localDeleted: false, remoteRevoked: false };
+    }
+    reason = err instanceof Error ? err.message : String(err);
+  }
+
+  const deleted = await db
+    .delete(wearableConnection)
+    .where(
+      and(
+        eq(wearableConnection.userId, userId),
+        eq(wearableConnection.provider, "whoop"),
+      ),
+    )
+    .returning({ id: wearableConnection.id });
+
+  return { localDeleted: deleted.length > 0, remoteRevoked, reason };
+}
+
 async function whoopGet<T>(
   userId: string,
   path: string,
