@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "test:planner": "tsx scripts/test-planner.ts",
-    "test:strip": "tsx scripts/test-strip-metadata.ts"
+    "test:strip": "tsx scripts/test-strip-metadata.ts",
+    "typecheck": "tsc --noEmit",
+    "verify": "npm run typecheck && npm run test:planner && npm run test:strip"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.22",
