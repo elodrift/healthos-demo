@@ -18,6 +18,7 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "//": "`.next` is excluded on purpose. Next generates a per-route type file under .next/types but never prunes it when a route is deleted, so a removed page leaves a permanent phantom TS2307 that no source change can fix. `npm run typecheck` must describe the source tree, not stale build output; `next build` still validates routes itself.",
+  "exclude": ["node_modules", ".next"]
 }

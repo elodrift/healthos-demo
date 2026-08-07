@@ -10,7 +10,8 @@
     "test:planner": "tsx scripts/test-planner.ts",
     "test:strip": "tsx scripts/test-strip-metadata.ts",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run test:planner && npm run test:strip"
+    "verify": "npm run typecheck && npm run test:planner && npm run test:strip && npm run test:live",
+    "test:live": "tsx scripts/test-live-day.ts"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.22",

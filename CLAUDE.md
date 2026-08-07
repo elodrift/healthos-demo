@@ -113,6 +113,32 @@ repeated or "re-fixed" on my authority.
 The pattern in both: an assumption about the platform, asserted instead of
 measured. `curl` the origin and measure the transfer before advising.
 
+### 2.6 Auth in this sandbox: the origin is not localhost
+
+Sign-in failed with Better Auth's `Invalid origin` even though the dev server
+binds to `localhost:3000`. The browser reaches the app through a rotating v0
+proxy host (`https://sb-<id>.vercel.run`), and that is the `Origin` header
+Better Auth validates. Listing `localhost` alone does not fix it.
+
+`lib/auth.ts` therefore adds `https://*.vercel.run` and `https://*.v0.build`
+to `trustedOrigins` **in development only** — wildcards are supported, see
+`node_modules/better-auth/dist/auth/trusted-origins.mjs`. Production keeps the
+explicit URL cascade. Do not "simplify" this to localhost; sign-in will break
+in the preview.
+
+Two related constraints in the same file, both load-bearing:
+
+- The dev-mode `sameSite: "none", secure: true` cookie override is required
+  because the preview renders in a cross-site iframe. Without it the session
+  cookie is silently dropped and the user looks permanently logged out.
+- `BETTER_AUTH_SECRET` lives in `.env.local` (gitignored) as a dev-only value
+  so the flow could be built and tested. Production **throws** if the secret is
+  missing rather than falling back — a silent fallback would sign real sessions
+  with a throwaway key. A real secret must be set in Vercel env vars.
+
+This project is Next **14.2**, so `headers()` and `cookies()` are synchronous.
+The Neon skill's examples are Next 16 and `await` them; do not copy that here.
+
 ## 3. Product rules that constrain code, not just copy
 
 These come from the DNA. They are listed here because each one has a concrete
