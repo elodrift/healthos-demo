@@ -528,3 +528,60 @@ so they never block a build.
 Two follow-on notes. Changing `BETTER_AUTH_SECRET` later signs out every existing
 user, so it is set once and left alone. And this build is what poisons `.next` for
 the dev server every time, so expect to run the §6 orphan-kill afterwards.
+
+### 6.2 `WHOOP_REDIRECT_BASE_URL` is an origin, and gets set to the callback
+
+During setup this was set to the **full callback URL** instead of the origin, so
+`whoopRedirectUri()` appended its own path and produced
+`.../api/whoop/callback/api/whoop/callback`. WHOOP rejects that as a
+`redirect_uri` mismatch — an error that names the parameter but not the
+duplication, so it reads like a dashboard misconfiguration and sends you looking
+in the wrong place.
+
+This is a predictable confusion rather than carelessness: WHOOP's dashboard asks
+for the *entire* redirect URI, so that string is the one in front of whoever is
+configuring the app, and it is the natural thing to paste. Since the code always
+appends the path itself, a supplied one is unambiguously redundant, so
+`whoopRedirectUri()` now strips a trailing `/api/whoop/callback` as well as
+trailing slashes, and assumes `https://` for a bare host.
+
+`npm run test:whoop` pins the invariant that actually matters — one callback path
+in the output, character-for-character equal to the registered URI — across all
+five spellings, including the one that broke. It also asserts the function
+*throws* when nothing is resolvable, since emitting a malformed URI would surface
+as the same opaque WHOOP error.
+
+Related trap in the same function: with `WHOOP_REDIRECT_BASE_URL` unset, the
+fallback chain reaches `VERCEL_URL`, which is **deployment-specific** on previews
+(`healthos-demo-a1b2c3.vercel.app`). That can never match a registered URI, so the
+variable must stay pinned to the stable production origin even though the fallback
+looks like it would cope.
+
+### 6.3 Adding an env var does not change an already-deployed site
+
+Adding the `WHOOP_*` vars did not enable the Connect button on production, because
+Vercel binds environment variables **at build time**. The live deployment predated
+them (confirmed by the response `age` header: built ~5 minutes before the vars were
+written) and kept showing SETUP NEEDED. Only a redeploy picks them up.
+
+The preview and production diverge here, which is the confusing part — the same
+page, signed in as the same user at the same moment, rendered a working button on
+`localhost:3000` and a disabled one on `*.vercel.app`. So **always establish which
+surface a screenshot is from before diagnosing**; a fix verified on the preview says
+nothing about the deployed site. The dev server reads `.env.development.local` on
+start, so restarting it is enough locally, and that difference is exactly what makes
+it a false confirmation for production.
+
+The old SETUP NEEDED copy actively misdirected: it said the vars were "not set" and
+to "then reload". Both were wrong in the case that actually happened — they *were*
+set, and reloading a deployed page can never pick up new env vars — so it sent the
+reader back to a dashboard they had already filled in correctly. It now says "not
+visible to this deployment" and asks for a **redeploy**, naming build-time binding
+as the reason.
+
+Diagnosing which surface is which, without guessing:
+
+```bash
+# production: large `age` means the build predates a recent env change
+curl -sI https://healthos-demo-chi.vercel.app/privacy | grep -iE '^(age|x-vercel-id|date)'
+```

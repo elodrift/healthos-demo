@@ -69,8 +69,23 @@ export function whoopRedirectUri(): string {
   if (!base) {
     throw new WhoopAuthError("Cannot resolve a redirect URI for WHOOP.");
   }
-  const origin = base.startsWith("http") ? base : `https://${base}`;
-  return `${origin.replace(/\/$/, "")}/api/whoop/callback`;
+  const withScheme = base.startsWith("http") ? base : `https://${base}`;
+
+  // Tolerate WHOOP_REDIRECT_BASE_URL being set to the *full callback URL*
+  // rather than the origin.
+  //
+  // This is not hypothetical tidiness: it happened during setup. WHOOP's
+  // dashboard asks for the whole redirect URI, so that is the string in front of
+  // whoever is configuring this, and pasting it here yields
+  // ".../api/whoop/callback/api/whoop/callback" — which WHOOP rejects as a
+  // redirect_uri mismatch, an error that says nothing about the real cause.
+  // Since we always append the path ourselves, a supplied one is unambiguously
+  // redundant and safe to strip.
+  const origin = withScheme
+    .replace(/\/+$/, "")
+    .replace(/\/api\/whoop\/callback$/, "");
+
+  return `${origin}/api/whoop/callback`;
 }
 
 /**

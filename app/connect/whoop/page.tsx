@@ -124,6 +124,15 @@ export default async function ConnectWhoopPage({
           <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">
             Setup needed
           </h2>
+          {/*
+            Says "not visible to this deployment", not "not set".
+
+            The earlier copy said "not set ... then reload", which cost real
+            debugging time: the credentials *were* set in project settings, but
+            this build predated them, and reloading a deployed page can never
+            pick up new environment variables. The message sent the reader back
+            to the dashboard they had already filled in correctly.
+          */}
           <p className="mt-2 text-[13px] leading-relaxed text-ink-mid">
             <code className="font-mono text-[12px] text-ink-hi">
               WHOOP_CLIENT_ID
@@ -132,8 +141,11 @@ export default async function ConnectWhoopPage({
             <code className="font-mono text-[12px] text-ink-hi">
               WHOOP_CLIENT_SECRET
             </code>{" "}
-            are not set, so the button below is disabled. Add them from your
-            WHOOP developer app, then reload.
+            are not visible to this deployment, so the button below is disabled.
+            Add them from your WHOOP developer app, then{" "}
+            <strong className="font-semibold text-ink-hi">redeploy</strong> —
+            environment variables are read at build time, so if you have already
+            added them, reloading this page will not pick them up.
           </p>
         </section>
       ) : null}
