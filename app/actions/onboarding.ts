@@ -85,24 +85,45 @@ export async function saveGoalContract(
     them is far more likely a typo (1600 for 160) than a real goal. Rejecting is
     right: a mistyped target silently reshapes every plan that follows.
   */
-  function parseGrams(field: string): number | null | { error: string } {
+  function parseGrams(
+    field: string,
+    noun: string,
+    min: number,
+    max: number,
+  ): number | null | { error: string } {
     const raw = String(formData.get(field) ?? "").trim();
     if (!raw) return null;
-    if (!/^\d{1,4}$/.test(raw)) return { error: "Enter protein in whole grams." };
+    if (!/^\d{1,4}$/.test(raw)) return { error: `Enter ${noun} in whole grams.` };
     const n = Number(raw);
-    if (n < 20 || n > 400) {
-      return { error: "Protein should be between 20g and 400g a day." };
+    if (n < min || n > max) {
+      const Noun = noun[0].toUpperCase() + noun.slice(1);
+      return { error: `${Noun} should be between ${min}g and ${max}g a day.` };
     }
     return n;
   }
 
-  const targetParsed = parseGrams("proteinTargetG");
+  const targetParsed = parseGrams("proteinTargetG", "protein", 20, 400);
   if (targetParsed !== null && typeof targetParsed === "object") return targetParsed;
-  const floorParsed = parseGrams("proteinFloorG");
+  const floorParsed = parseGrams("proteinFloorG", "protein", 20, 400);
   if (floorParsed !== null && typeof floorParsed === "object") return floorParsed;
+
+  /*
+    Carbohydrate uses a wider rail than protein on purpose. Ketogenic targets
+    legitimately sit under 20g, and 8g/kg for a large endurance athlete reaches
+    ~800g, so protein's 20–400 window would reject real goals at both ends.
+    Still a typo rail: 2400 for 240 is caught.
+
+    This is the field the strain logic needs. WHOOP strain only moves carbs, and
+    only when a gram-level carb target exists — with no way to enter one, that
+    branch was unreachable for every real user and the trace could only ever say
+    "read, but this day carries no gram-level carb target for it to move".
+  */
+  const carbParsed = parseGrams("carbTargetG", "carbohydrate", 10, 800);
+  if (carbParsed !== null && typeof carbParsed === "object") return carbParsed;
 
   const proteinTargetG = targetParsed;
   const proteinFloorG = floorParsed;
+  const carbTargetG = carbParsed;
 
   // A floor above the target is contradictory: the floor exists as the reduced
   // commitment for low-control days, so this is almost always the two swapped.
@@ -123,6 +144,7 @@ export async function saveGoalContract(
     targetDate,
     proteinTargetG,
     proteinFloorG,
+    carbTargetG,
     updatedAt: new Date(),
   };
 

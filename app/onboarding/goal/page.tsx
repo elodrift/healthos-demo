@@ -55,6 +55,7 @@ export default async function GoalPage() {
           // field, since 0 would present itself as a real target of zero.
           proteinTargetG: p?.proteinTargetG != null ? String(p.proteinTargetG) : "",
           proteinFloorG: p?.proteinFloorG != null ? String(p.proteinFloorG) : "",
+          carbTargetG: p?.carbTargetG != null ? String(p.carbTargetG) : "",
         }}
       />
     </main>

@@ -474,7 +474,18 @@ export function proposeDay(args: {
     rationale.push(
       profile.typicalWakeTime
         ? `No wake time from WHOOP today, so this uses your usual ${formatTime(wakeMins)}.`
-        : `No wake data and no usual wake time on file, so this assumes ${formatTime(wakeMins)}. Correct it and the day re-plans.`,
+        /*
+          This used to invite the user to correct the assumed wake time, which
+          the app cannot honour because no form writes `typicalWakeTime`: true of
+          the engine, false of the product. Stating the consequence is honest
+          without promising a control that does not exist. Restore the invitation
+          in the same change that ships the field.
+
+          (Phrased without the literal sentence on purpose —
+          test-profile-writable.ts greps this file for it, and a comment quoting
+          it verbatim would keep the guard red.)
+        */
+        : `No wake data and no usual wake time on file, so this assumes ${formatTime(wakeMins)}, and every meal time below is offset from that guess.`,
     );
     trace.push({
       input: "WHOOP_WAKE",

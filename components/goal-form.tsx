@@ -12,6 +12,7 @@ type Props = {
     targetDate: string;
     proteinTargetG: string;
     proteinFloorG: string;
+    carbTargetG: string;
   };
 };
 
@@ -167,8 +168,15 @@ export default function GoalForm({ initial }: Props) {
         </legend>
 
         <div className="flex flex-col gap-1.5">
+          {/*
+            The sr-only suffix exists because this form now has two inputs whose
+            visible label is just "Target". Sighted users disambiguate them from
+            the fieldset heading above; in the accessibility tree both surfaced as
+            plain "Target", so the qualifier is added to the accessible name
+            without altering the layout.
+          */}
           <label htmlFor="proteinTargetG" className="text-[13px] font-medium text-ink-hi">
-            Target
+            Target<span className="sr-only"> — daily protein, in grams</span>
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -188,7 +196,7 @@ export default function GoalForm({ initial }: Props) {
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="proteinFloorG" className="text-[13px] font-medium text-ink-hi">
-            Floor
+            Floor<span className="sr-only"> — daily protein, in grams</span>
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -210,6 +218,48 @@ export default function GoalForm({ initial }: Props) {
           Leave these blank and the day shows a running total instead of progress — nothing is
           assumed on your behalf. The floor is what gets defended on days you don&apos;t control
           your food.
+        </p>
+      </fieldset>
+
+      {/*
+        Same "typed, not derived" rule as protein above: this could be inferred
+        from calories minus protein and fat, but it would then be the app's
+        arithmetic presented as the user's commitment.
+
+        It is a separate fieldset because it is the one target WHOOP strain
+        actually moves, and the hint says so plainly — without it, strain is read
+        every day and changes nothing.
+      */}
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">
+          Daily carbohydrate{" "}
+          <span className="normal-case tracking-normal">(optional)</span>
+        </legend>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="carbTargetG" className="text-[13px] font-medium text-ink-hi">
+            Target<span className="sr-only"> — daily carbohydrate, in grams</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="carbTargetG"
+              name="carbTargetG"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              defaultValue={initial.carbTargetG}
+              placeholder="240"
+              aria-describedby="carb-hint"
+              className="min-h-[44px] w-full rounded-lg border border-base-700 bg-base-900 px-3 text-[15px] text-ink-hi placeholder:text-ink-lo/60 outline-none transition-colors focus:border-accent-green/60"
+            />
+            <span className="font-mono text-[13px] text-ink-lo">g</span>
+          </div>
+        </div>
+
+        <p id="carb-hint" className="text-[12px] leading-relaxed text-ink-mid">
+          This is the number your WHOOP strain moves: set it, and hard days raise it while easy
+          days ease it back, with the reading and the adjustment shown in the day&apos;s trace.
+          Left blank, strain is still recorded but changes nothing.
         </p>
       </fieldset>
 
