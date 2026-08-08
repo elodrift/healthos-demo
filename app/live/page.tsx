@@ -90,6 +90,9 @@ export default async function LivePage() {
           <SyncStatus
             syncedAt={result.syncedAt ? result.syncedAt.toISOString() : null}
             servedFromFreshStore={result.servedFromFreshStore}
+            // `fromCache` means the WHOOP fetch failed and we fell back to a
+            // stored row, so it is exactly the inverse of "we reached WHOOP".
+            reachedProvider={!result.fromCache}
           />
           <Link
             href="/log"
@@ -97,11 +100,7 @@ export default async function LivePage() {
           >
             Log a meal
           </Link>
-          <DayProposalView
-            proposal={result.proposal}
-            fromCache={result.fromCache}
-            cachedDay={result.cachedDay}
-          />
+          <DayProposalView proposal={result.proposal} />
           {/*
             Placed after the plan, not before it. The trace explains a schedule
             the reader has already seen; leading with the reasoning would ask them

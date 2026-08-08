@@ -38,10 +38,21 @@ function describeAge(syncedAt: Date, now: number): { text: string; stale: boolea
 export function SyncStatus({
   syncedAt,
   servedFromFreshStore,
+  reachedProvider,
 }: {
   /** Serialized over the RSC boundary, so this arrives as a string or null. */
   syncedAt: string | null;
   servedFromFreshStore: boolean;
+  /**
+   * Whether WHOOP itself answered on this render.
+   *
+   * Without this the component only knew when a *row* was written, so a plan
+   * served from cache during an outage rendered "Read just now" — describing our
+   * own database write as though it were a reading from the user's watch, and
+   * directly contradicting the outage notice on the same screen. An age is only
+   * meaningful once we say what it is the age of.
+   */
+  reachedProvider: boolean;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -58,10 +69,19 @@ export function SyncStatus({
     try {
       const result = await refreshWearable();
       if (result.ok) {
-        // The plan is server-rendered, so the new numbers only exist after a
-        // refetch of this route.
+        /*
+         * `refreshWearable` only clears the freshness stamp so the next render
+         * re-fetches; it does not itself call WHOOP, so its `ok` means "a fetch
+         * will be attempted", NOT "a fetch succeeded".
+         *
+         * This previously said "Pulled fresh data from WHOOP." and rendered
+         * directly above "WHOOP could not be reached" when the token was bad —
+         * the button asserted a successful sync that never happened. The result
+         * of the attempt is reported by the line above, which reads the actual
+         * outcome after `router.refresh()`, so this only describes the request.
+         */
         router.refresh();
-        setMessage("Pulled fresh data from WHOOP.");
+        setMessage("Asked WHOOP for a new reading. The status above shows the result.");
       } else if (result.reason === "COOLDOWN") {
         setMessage(`Just synced. Try again in ${result.retryInSeconds}s.`);
       } else {
@@ -83,6 +103,16 @@ export function SyncStatus({
         <p className="mt-1 text-[13px] leading-relaxed text-ink-mid">
           {age === null ? (
             "Never synced on this device."
+          ) : !reachedProvider ? (
+            /*
+             * The outage leads. "Stored" rather than "Read" because nothing was
+             * read from the watch on this render, and the age is explicitly
+             * attributed to the stored copy so it cannot be misread as a sync.
+             */
+            <>
+              WHOOP could not be reached. Showing the reading stored{" "}
+              <span className="font-mono text-ink-hi">{age.text}</span>.
+            </>
           ) : (
             <>
               Read{" "}

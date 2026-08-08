@@ -29,15 +29,7 @@ const CONTROL_COPY: Record<string, string> = {
   UNKNOWN: "Control over food not set",
 };
 
-export function DayProposalView({
-  proposal,
-  fromCache,
-  cachedDay,
-}: {
-  proposal: DayProposal;
-  fromCache: boolean;
-  cachedDay: string | null;
-}) {
+export function DayProposalView({ proposal }: { proposal: DayProposal }) {
   const evidence = EVIDENCE_COPY[proposal.evidence];
 
   return (
@@ -59,13 +51,16 @@ export function DayProposalView({
 
       <p className="text-[13px] leading-relaxed text-ink-lo">{evidence.detail}</p>
 
-      {fromCache ? (
-        <p className="rounded-xl border border-dashed border-base-700 p-3 text-[13px] leading-relaxed text-ink-lo">
-          WHOOP could not be reached, so this uses your reading from{" "}
-          <span className="font-mono text-ink-hi">{cachedDay}</span>. It is real data, just
-          not today&apos;s.
-        </p>
-      ) : null}
+      {/*
+        The outage notice used to live here and said "It is real data, just not
+        today's" — a claim this component cannot support, since it has `cachedDay`
+        but no notion of the user's local today, so it asserted the reading came
+        from another day even when it came from today. Rather than restate it
+        accurately in two places, the single source of truth is now `SyncStatus`,
+        which owns the sync age and can say "could not be reached" together with
+        how old the stored reading actually is. Two separate outage banners within
+        a few lines read as two separate problems.
+      */}
 
       {/*
         What logged intake did to the rest of the day.
