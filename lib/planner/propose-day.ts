@@ -58,6 +58,53 @@ export type TrainingWindow = {
   type: string | null;
 } | null;
 
+/**
+ * A meal the user has already logged today.
+ *
+ * `confidence` and `estimated` are carried through rather than flattened into
+ * the macro figures, because they decide whether the resulting adjustment is
+ * `MEASURED` or `ASSUMED` in the trace. A 1200 kcal restaurant dish estimated
+ * from a photo moves the plan exactly as far as a weighed one does — the
+ * difference is that the system must not claim to know it.
+ */
+export type ConsumedMeal = {
+  /** Minutes since local midnight, or null when the log carries no time. */
+  atMinutes: Minutes | null;
+  proteinG: number | null;
+  carbG: number | null;
+  kcal: number | null;
+  confidence: "LOW" | "MEDIUM" | "HIGH";
+  estimated: boolean;
+};
+
+/**
+ * What is left of the day's commitment after logged intake.
+ *
+ * Separate from `DayTarget` on purpose. The target is the promise made this
+ * morning; this is the promise minus reality. Showing one in place of the other
+ * is how a tracker ends up telling someone they have 140g of protein to eat at
+ * 21:00 with one slot left.
+ *
+ * `overBy` is not the negative of `remaining`: once a macro goes past its
+ * figure, `remaining` clamps to 0 (there is nothing left to plan) while
+ * `overBy` records by how much, so the UI can state the overage without the
+ * planner trying to distribute a negative amount across slots.
+ */
+export type RemainingTargets = {
+  proteinG: number | null;
+  carbG: number | null;
+  kcal: number | null;
+  overBy: { proteinG: number; carbG: number; kcal: number };
+  /** Sum of what was logged, for showing the subtraction rather than asserting it. */
+  consumed: { proteinG: number; carbG: number; kcal: number };
+  mealsLogged: number;
+  /**
+   * True when every logged figure was a low-confidence estimate. The remainder
+   * is then arithmetic on guesses, and the UI must not present it as a budget.
+   */
+  allLowConfidence: boolean;
+};
+
 export type ProposedSlot = {
   slotTime: string;
   label: string;
@@ -69,6 +116,19 @@ export type ProposedSlot = {
   /** The single highest-leverage decision for this slot on low-control days. */
   oneDecision: string | null;
   sortOrder: number;
+  /**
+   * This slot's time has passed, so it can no longer absorb any of the
+   * remainder. Null when the caller passed no clock — absent knowledge of "now"
+   * is not the same as knowing the slot is still ahead, and `false` would say
+   * the latter.
+   */
+  isPast: boolean | null;
+  /**
+   * Set when the remainder was redistributed into this slot, describing the move
+   * in the slot's own terms ("+18g protein on this morning's plan"). Null when
+   * nothing was redistributed, so the UI shows a delta only where one exists.
+   */
+  adjustmentNote: string | null;
 };
 
 /**
@@ -107,6 +167,21 @@ export type DayProposal = {
   /** Human-readable reasons, so the proposal can be argued with. */
   rationale: string[];
   evidence: Evidence;
+  /**
+   * The day's commitment minus what has actually been logged.
+   *
+   * Null when the caller passed no `consumed` list at all, which is different
+   * from an empty one: no list means intake is unknown, an empty list means
+   * nothing has been eaten yet. Collapsing those would show a full budget
+   * remaining to someone whose log simply failed to load.
+   */
+  remaining: RemainingTargets | null;
+  /**
+   * Plain-language summary of how logged intake changed the rest of the day.
+   * Empty when nothing was logged, so the UI can stay quiet rather than
+   * announcing a replan that did not happen.
+   */
+  replanNotes: string[];
   /**
    * Ordered links from input to consequence, one per decision the planner made.
    * Empty is not possible in practice — control level always contributes one —
@@ -172,6 +247,8 @@ export type DecisionTraceEntry = {
   input:
     | "WHOOP_WAKE"
     | "WHOOP_RECOVERY"
+    | "WHOOP_STRAIN"
+    | "LOGGED_INTAKE"
     | "PROFILE_CONTROL"
     | "PROFILE_TRAINING"
     | "PROFILE_GOAL";
@@ -193,21 +270,21 @@ export type DecisionTraceEntry = {
  * any becomes load-bearing without moving off this list.
  *
  * Surfacing this is the honest answer to "what does my WHOOP data do here?". A
- * panel that showed strain and HRV beside the plan would imply they shaped it;
- * they do not. Sleep duration is the subtle case — it moves the evidence badge
- * but changes no time and no target, so it is listed with that exact caveat
- * rather than as an input.
+ * panel that showed HRV beside the plan would imply it shaped it; it does not.
+ * Sleep duration is the subtle case — it moves the evidence badge but changes no
+ * time and no target, so it is listed with that exact caveat rather than as an
+ * input.
+ *
+ * Strain used to head this list and has been removed because it now genuinely
+ * moves the carb target (see the strain band below). Removing it was the whole
+ * point of the exercise: the list is meant to shrink as signals become
+ * load-bearing, not to sit here as permanent decoration.
  */
 export const UNUSED_WEARABLE_SIGNALS: ReadonlyArray<{
   field: string;
   label: string;
   why: string;
 }> = [
-  {
-    field: "strain",
-    label: "Day strain",
-    why: "Stored, but no rule maps strain onto meal timing or macros yet.",
-  },
   {
     field: "hrvMs",
     label: "HRV",
@@ -284,14 +361,86 @@ function shouldEmitPreciseTargets(control: ControlLevel): boolean {
   return control === "FULL";
 }
 
+/**
+ * WHOOP strain bands, on WHOOP's own 0–21 scale.
+ *
+ * Only the ends of the scale move anything. A rule that nudged carbs for every
+ * one-point wobble in the middle would be noise dressed as responsiveness, and
+ * the user would have no way to tell the two apart.
+ */
+const STRAIN_HIGH = 14;
+const STRAIN_LOW = 8;
+/** Proportional carb moves, kept modest because strain is not a measured need. */
+const STRAIN_HIGH_CARB_UPLIFT = 0.15;
+const STRAIN_LOW_CARB_REDUCTION = 0.1;
+
+/** Sum a macro across logged meals, treating nulls as absent rather than zero. */
+function sumMacro(meals: ConsumedMeal[], key: "proteinG" | "carbG" | "kcal"): number {
+  return meals.reduce((n, m) => n + (m[key] ?? 0), 0);
+}
+
+/**
+ * Subtract logged intake from the day's commitment.
+ *
+ * Clamps at zero and records the overage separately, so downstream slot maths
+ * never has to divide a negative remainder across meals. A macro with no target
+ * stays null: there is no remainder of a promise that was never made.
+ */
+function computeRemaining(
+  dayTarget: DayTarget,
+  meals: ConsumedMeal[],
+): RemainingTargets {
+  const consumed = {
+    proteinG: Math.round(sumMacro(meals, "proteinG")),
+    carbG: Math.round(sumMacro(meals, "carbG")),
+    kcal: Math.round(sumMacro(meals, "kcal")),
+  };
+
+  const left = (target: number | null, eaten: number) =>
+    target === null ? null : Math.max(0, Math.round(target - eaten));
+  const over = (target: number | null, eaten: number) =>
+    target === null ? 0 : Math.max(0, Math.round(eaten - target));
+
+  return {
+    proteinG: left(dayTarget.proteinG, consumed.proteinG),
+    carbG: left(dayTarget.carbG, consumed.carbG),
+    kcal: left(dayTarget.kcal, consumed.kcal),
+    overBy: {
+      proteinG: over(dayTarget.proteinG, consumed.proteinG),
+      carbG: over(dayTarget.carbG, consumed.carbG),
+      kcal: over(dayTarget.kcal, consumed.kcal),
+    },
+    consumed,
+    mealsLogged: meals.length,
+    // `every` on an empty array is true, so the meal count guards it: a day with
+    // nothing logged is not a day of low-confidence guesses.
+    allLowConfidence:
+      meals.length > 0 && meals.every((m) => m.confidence === "LOW"),
+  };
+}
+
 export function proposeDay(args: {
   signal: WearableSignal;
   profile: PlannerProfile;
   training: TrainingWindow;
+  /**
+   * Meals already logged today. Undefined means "not known" and produces a null
+   * remainder; an empty array means "nothing eaten yet" and produces a full one.
+   */
+  consumed?: ConsumedMeal[] | null;
+  /**
+   * Minutes since local midnight, for deciding which slots can still absorb the
+   * remainder. Stays an argument rather than a `Date.now()` call so this module
+   * remains pure and the replan is testable at any hour.
+   */
+  nowMinutes?: Minutes | null;
 }): DayProposal {
   const { signal, profile, training } = args;
+  const consumed = args.consumed ?? null;
+  const nowMinutes = args.nowMinutes ?? null;
   const rationale: string[] = [];
   const deferrals: string[] = [];
+  const replanNotes: string[] = [];
   // Built alongside `rationale` at each decision point, from the same branch, so
   // the structured trace and the prose cannot drift apart.
   const trace: DecisionTraceEntry[] = [];
@@ -395,6 +544,66 @@ export function proposeDay(args: {
     });
   }
 
+  /* --- strain: the day's actual output moves carbohydrate ---------------- */
+  /*
+   * Strain is the first WHOOP signal beyond recovery and wake to genuinely
+   * change a number, so it comes off UNUSED_WEARABLE_SIGNALS above.
+   *
+   * It only moves carbs, and only when there is a carb target to move: on a
+   * low-control day the planner emits no carb figure at all, and inventing one
+   * here purely because strain was high would be §4.11 precision theater — a
+   * gram target the day cannot honour, justified by a signal the user never
+   * asked to be measured against.
+   */
+  let carbTargetG = profile.carbTargetG;
+  if (signal.strain !== null && profile.carbTargetG !== null) {
+    if (signal.strain >= STRAIN_HIGH) {
+      carbTargetG = Math.round(profile.carbTargetG * (1 + STRAIN_HIGH_CARB_UPLIFT));
+      rationale.push(
+        `Strain is ${signal.strain.toFixed(1)}, so carbohydrate rises from ${profile.carbTargetG}g to ${carbTargetG}g.`,
+      );
+      trace.push({
+        input: "WHOOP_STRAIN",
+        label: "Day strain",
+        reading: signal.strain.toFixed(1),
+        effect: `${STRAIN_HIGH} or above, so the carb target rose ${Math.round(STRAIN_HIGH_CARB_UPLIFT * 100)}% to ${carbTargetG}g to cover the extra output.`,
+        basis: "MEASURED",
+      });
+    } else if (signal.strain < STRAIN_LOW) {
+      carbTargetG = Math.round(profile.carbTargetG * (1 - STRAIN_LOW_CARB_REDUCTION));
+      rationale.push(
+        `Strain is only ${signal.strain.toFixed(1)}, so carbohydrate eases from ${profile.carbTargetG}g to ${carbTargetG}g.`,
+      );
+      trace.push({
+        input: "WHOOP_STRAIN",
+        label: "Day strain",
+        reading: signal.strain.toFixed(1),
+        effect: `Below ${STRAIN_LOW}, so the carb target eased ${Math.round(STRAIN_LOW_CARB_REDUCTION * 100)}% to ${carbTargetG}g.`,
+        basis: "MEASURED",
+      });
+    } else {
+      // Same reasoning as the recovery middle band: a signal that was read and
+      // deliberately changed nothing must say so, or it is indistinguishable
+      // from a signal that was never read.
+      trace.push({
+        input: "WHOOP_STRAIN",
+        label: "Day strain",
+        reading: signal.strain.toFixed(1),
+        effect: `Between ${STRAIN_LOW} and ${STRAIN_HIGH}, an ordinary day, so the carb target stays at ${profile.carbTargetG}g.`,
+        basis: "MEASURED",
+      });
+    }
+  } else if (signal.strain !== null) {
+    trace.push({
+      input: "WHOOP_STRAIN",
+      label: "Day strain",
+      reading: signal.strain.toFixed(1),
+      effect:
+        "Read, but this day carries no gram-level carb target for it to move, so it changed nothing.",
+      basis: "MEASURED",
+    });
+  }
+
   /* --- meal slots ------------------------------------------------------- */
   const count = slotCountFor(control, profile.mealsPerDay);
   const precise = shouldEmitPreciseTargets(control);
@@ -462,9 +671,7 @@ export function proposeDay(args: {
       purpose,
       targetProteinG: perSlotProtein,
       targetCarbG:
-        precise && profile.carbTargetG
-          ? Math.round(profile.carbTargetG / count)
-          : null,
+        precise && carbTargetG ? Math.round(carbTargetG / count) : null,
       targetKcal:
         precise && profile.kcalTarget
           ? Math.round(profile.kcalTarget / count)
@@ -475,6 +682,8 @@ export function proposeDay(args: {
           ? "Make this one protein-led."
           : "Add one palm-sized protein to whatever you eat.",
       sortOrder: i,
+      isPast: nowMinutes === null ? null : at <= nowMinutes,
+      adjustmentNote: null,
     });
   }
 
@@ -502,14 +711,8 @@ export function proposeDay(args: {
     "Wake, training and sleep times describe your day, not ours, so nothing here is applied until you confirm it.",
   );
 
-  return {
-    wakeTime: formatTime(wakeMins),
-    sleepTime: formatTime(sleepMins),
-    trainingStart: training?.start ?? null,
-    trainingEnd: training?.end ?? null,
-    trainingType: training?.type ?? null,
-    slots,
-    dayTarget: {
+  /* --- replan against what has actually been eaten ---------------------- */
+  const dayTarget: DayTarget = {
       // proteinTotal is already the target-or-floor decision made above; reusing
       // it keeps one source of truth rather than re-deriving the same rule.
       proteinG: proteinTotal ?? null,
@@ -520,9 +723,103 @@ export function proposeDay(args: {
         !precise && profile.proteinFloorG !== null && profile.proteinFloorG !== undefined
           ? "FLOOR"
           : "TARGET",
-      carbG: precise ? (profile.carbTargetG ?? null) : null,
-      kcal: precise ? (profile.kcalTarget ?? null) : null,
-    },
+    carbG: precise ? (carbTargetG ?? null) : null,
+    kcal: precise ? (profile.kcalTarget ?? null) : null,
+  };
+
+  const remaining = consumed === null ? null : computeRemaining(dayTarget, consumed);
+
+  if (remaining !== null && remaining.mealsLogged > 0) {
+    /*
+     * Redistribute what is left across the slots that can still absorb it.
+     *
+     * Only slots still ahead of `nowMinutes` qualify. Spreading the remainder
+     * over a breakfast that happened four hours ago produces a plan that adds up
+     * on paper and cannot be followed, which is the precise failure this whole
+     * change exists to remove. With no clock supplied, every slot is treated as
+     * available — an unknown hour must not silently delete the afternoon.
+     */
+    const absorbing = slots.filter((s) => s.isPast !== true);
+
+    if (absorbing.length > 0) {
+      const share = (total: number | null) =>
+        total === null ? null : Math.round(total / absorbing.length);
+
+      const perProtein = share(remaining.proteinG);
+      const perCarb = precise ? share(remaining.carbG) : null;
+      const perKcal = precise ? share(remaining.kcal) : null;
+
+      for (const slot of absorbing) {
+        const before = slot.targetProteinG;
+        if (perProtein !== null) slot.targetProteinG = perProtein;
+        if (perCarb !== null) slot.targetCarbG = perCarb;
+        if (perKcal !== null) slot.targetKcal = perKcal;
+
+        if (before !== null && perProtein !== null && perProtein !== before) {
+          const delta = perProtein - before;
+          slot.adjustmentNote = `${delta > 0 ? "+" : ""}${delta}g protein vs this morning's ${before}g.`;
+        }
+      }
+
+      replanNotes.push(
+        `${remaining.mealsLogged} meal${remaining.mealsLogged === 1 ? "" : "s"} logged so far: ${remaining.consumed.proteinG}g protein. The rest of the day is spread across your remaining ${absorbing.length} slot${absorbing.length === 1 ? "" : "s"}.`,
+      );
+    } else {
+      /*
+       * Every slot has passed. The remainder is real but there is nowhere left to
+       * put it, and quietly showing the morning's untouched per-slot numbers
+       * would imply a plan that no longer exists.
+       */
+      replanNotes.push(
+        remaining.proteinG === null || remaining.proteinG === 0
+          ? "Every planned meal time has passed. Nothing further is planned for today."
+          : `Every planned meal time has passed with ${remaining.proteinG}g protein still short of the day's ${dayTarget.proteinKind === "FLOOR" ? "floor" : "target"}. Tomorrow's plan starts fresh; this is not carried over.`,
+      );
+    }
+
+    // Overshoot is stated, never absorbed silently. Being over is information the
+    // user is entitled to, and hiding it inside a clamped remainder of zero would
+    // present a breached target as a met one.
+    if (remaining.overBy.kcal > 0) {
+      replanNotes.push(
+        `Logged intake is ${remaining.overBy.kcal} kcal past today's figure. Later slots are trimmed to what is left rather than rebalanced to hide it.`,
+      );
+    }
+
+    /*
+     * Confidence decides the basis, not the size of the adjustment. A photo
+     * estimate moves the plan exactly as far as a weighed meal does — the
+     * difference is only ever in what the system claims to know, which is the
+     * distinction the trace exists to carry.
+     */
+    trace.push({
+      input: "LOGGED_INTAKE",
+      label: "Logged meals",
+      reading: `${remaining.mealsLogged} meal${remaining.mealsLogged === 1 ? "" : "s"}, ${remaining.consumed.proteinG}g protein${remaining.consumed.kcal > 0 ? `, ${remaining.consumed.kcal} kcal` : ""}`,
+      effect:
+        absorbing.length > 0
+          ? `Subtracted from the day, leaving ${remaining.proteinG ?? 0}g protein across ${absorbing.length} remaining slot${absorbing.length === 1 ? "" : "s"}.`
+          : "Subtracted from the day, but every planned slot has passed so nothing was redistributed.",
+      basis: remaining.allLowConfidence ? "ASSUMED" : "MEASURED",
+    });
+
+    if (remaining.allLowConfidence) {
+      replanNotes.push(
+        "Every meal logged today was a low-confidence estimate, so this remainder is arithmetic on guesses rather than a budget.",
+      );
+    }
+  }
+
+  return {
+    wakeTime: formatTime(wakeMins),
+    sleepTime: formatTime(sleepMins),
+    trainingStart: training?.start ?? null,
+    trainingEnd: training?.end ?? null,
+    trainingType: training?.type ?? null,
+    slots,
+    dayTarget,
+    remaining,
+    replanNotes,
     rationale,
     evidence,
     controlLevel: control,

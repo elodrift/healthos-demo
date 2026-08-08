@@ -410,6 +410,25 @@ export type WhoopCycle = {
   score?: { strain: number; kilojoule: number; average_heart_rate: number };
 };
 
+/**
+ * A recorded workout.
+ *
+ * `sport_name` is optional in practice: WHOOP returns an id for activities it
+ * has no name for, and older records predate the field. The planner therefore
+ * treats the type as genuinely nullable rather than defaulting it to
+ * "workout" — labelling an unknown activity is a small lie that ends up printed
+ * beside a meal time as though it were read from the device.
+ */
+export type WhoopWorkout = {
+  id: string;
+  start: string;
+  end: string;
+  timezone_offset: string;
+  sport_name?: string | null;
+  score_state: ScoreState;
+  score?: { strain: number; kilojoule: number };
+};
+
 type Paged<T> = { records: T[]; next_token?: string };
 
 /** `limit` is capped at 25 by the API; larger values are rejected. */
@@ -427,6 +446,13 @@ export async function fetchSleep(userId: string, limit = 7) {
 
 export async function fetchCycles(userId: string, limit = 7) {
   return whoopGet<Paged<WhoopCycle>>(userId, "/v2/cycle", {
+    limit: String(Math.min(limit, 25)),
+  });
+}
+
+/** Recorded workouts. The `read:workout` scope is already requested at connect. */
+export async function fetchWorkouts(userId: string, limit = 10) {
+  return whoopGet<Paged<WhoopWorkout>>(userId, "/v2/activity/workout", {
     limit: String(Math.min(limit, 25)),
   });
 }
