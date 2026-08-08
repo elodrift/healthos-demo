@@ -7,6 +7,7 @@ import { buildLiveDay } from "@/lib/live/build-day";
 import { DayProposalView } from "@/components/live/day-proposal";
 import { DecisionTrace } from "@/components/live/decision-trace";
 import { LoggedAgainstTarget } from "@/components/live/logged-against-target";
+import { SyncStatus } from "@/components/live/sync-status";
 
 export const metadata: Metadata = {
   title: "Live mode — HealthOS",
@@ -81,6 +82,15 @@ export default async function LivePage() {
             what they do about the answer.
           */}
           <LoggedAgainstTarget dayTarget={result.proposal.dayTarget} />
+          {/*
+            Data age sits between the totals and the plan: it qualifies both, and
+            burying it at the bottom would put the caveat after every decision it
+            is meant to inform.
+          */}
+          <SyncStatus
+            syncedAt={result.syncedAt ? result.syncedAt.toISOString() : null}
+            servedFromFreshStore={result.servedFromFreshStore}
+          />
           <Link
             href="/log"
             className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-base-700 bg-base-900 px-4 text-[14px] font-semibold text-ink-hi"

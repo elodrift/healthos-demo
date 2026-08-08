@@ -31,7 +31,6 @@ import {
   type WhoopWorkout,
 } from "@/lib/whoop/client";
 import {
-  parseTime,
   proposeDay,
   type ConsumedMeal,
   type ControlLevel,
@@ -405,7 +404,7 @@ export async function buildLiveDay(
         ? kjToKcal(cycle.score.kilojoule)
         : null;
 
-    await persistDaily(userId, signal, mainSleep, kcalBurned);
+    await persistDaily(userId, signal, mainSleep, kcalBurned, day);
     await db
       .update(wearableConnection)
       .set({ lastSyncedAt: now, syncError: null, updatedAt: now })
@@ -455,11 +454,26 @@ export async function buildLiveDay(
       strain: cached.strain,
     });
 
+    /*
+     * Meals are read from the local database, so a WHOOP outage does not stop the
+     * plan adapting to what was eaten. Only the wearable half is stale, and the
+     * subtraction stays correct — but it is scoped to `cached.day`, not today, so
+     * a plan built from Tuesday's recovery is not silently credited with
+     * Wednesday's meals.
+     */
     return {
       status: "OK",
-      proposal: proposeDay({ signal, profile: plannerProfile, training: null }),
+      proposal: proposeDay({
+        signal,
+        profile: plannerProfile,
+        training: null,
+        consumed: await loadConsumed(userId, cached.day),
+        nowMinutes: nowMinutesIn("Z", now),
+      }),
       fromCache: true,
       cachedDay: cached.day,
+      syncedAt: cached.fetchedAt ?? null,
+      servedFromFreshStore: false,
     };
   }
 }
@@ -469,8 +483,15 @@ async function persistDaily(
   userId: string,
   signal: WearableSignal,
   mainSleep: WhoopSleep | null,
+  kcalBurned: number | null,
+  /**
+   * The user's local day. Passed in rather than recomputed from the server clock:
+   * this row is keyed on the day, so deriving it in UTC here while the planner
+   * derived it from the WHOOP offset above would write today's strain onto
+   * yesterday's row for anyone west of Greenwich in the evening.
+   */
+  day: string,
 ) {
-  const day = new Date().toISOString().slice(0, 10);
   await db
     .insert(wearableDaily)
     .values({
@@ -478,6 +499,10 @@ async function persistDaily(
       provider: "whoop",
       day,
       recoveryScore: signal.recoveryScore,
+      // Strain was missing from this write entirely, which made it unreadable on
+      // any later render even though it had been fetched.
+      strain: signal.strain,
+      kcalBurned,
       sleepDurationMin: signal.sleepDurationMin,
       sleepPerformance: signal.sleepPerformance,
       sleepStart: mainSleep ? new Date(mainSleep.start) : null,
@@ -487,8 +512,12 @@ async function persistDaily(
       target: [wearableDaily.userId, wearableDaily.provider, wearableDaily.day],
       set: {
         recoveryScore: signal.recoveryScore,
+        strain: signal.strain,
+        kcalBurned,
         sleepDurationMin: signal.sleepDurationMin,
         sleepPerformance: signal.sleepPerformance,
+        sleepStart: mainSleep ? new Date(mainSleep.start) : null,
+        sleepEnd: mainSleep ? new Date(mainSleep.end) : null,
         fetchedAt: new Date(),
       },
     });

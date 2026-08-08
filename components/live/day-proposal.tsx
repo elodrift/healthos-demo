@@ -67,6 +67,63 @@ export function DayProposalView({
         </p>
       ) : null}
 
+      {/*
+        What logged intake did to the rest of the day.
+        Sits above the rail because it is the reason the rail's numbers differ
+        from the ones the user saw this morning; showing the changed plan first
+        and explaining it afterwards reads as though the plan simply drifted.
+      */}
+      {proposal.replanNotes.length > 0 ? (
+        <section className="rounded-xl border border-accent-green/30 bg-accent-green/5 p-4">
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.12em] text-accent-green">
+            Replanned since this morning
+          </h2>
+          <ul className="mt-2.5 flex flex-col gap-2">
+            {proposal.replanNotes.map((line) => (
+              <li key={line} className="text-[13px] leading-relaxed text-ink-mid">
+                {line}
+              </li>
+            ))}
+          </ul>
+          {proposal.remaining ? (
+            <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 border-t border-base-700 pt-3">
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">
+                  Eaten
+                </dt>
+                <dd className="mt-0.5 font-mono text-[15px] text-ink-hi">
+                  {proposal.remaining.consumed.proteinG}g
+                </dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">
+                  Left
+                </dt>
+                <dd className="mt-0.5 font-mono text-[15px] text-ink-hi">
+                  {proposal.remaining.proteinG === null
+                    ? "—"
+                    : `${proposal.remaining.proteinG}g`}
+                </dd>
+              </div>
+              {/*
+                Estimate provenance travels with the figures, always visible.
+                A badge that appeared only when confidence was low would make its
+                absence ambiguous — the reader could not tell "confirmed" from
+                "not yet labelled".
+              */}
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">
+                  Basis
+                </dt>
+                <dd className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-mid">
+                  {proposal.remaining.allLowConfidence ? "Est. · low" : "Est."}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+        </section>
+      ) : null}
+
       {/* The day skeleton: the frame every meal time is derived from. */}
       <dl className="grid grid-cols-2 gap-3">
         <div className="rounded-xl border border-base-700 bg-base-900 p-3">
@@ -88,7 +145,16 @@ export function DayProposalView({
         {proposal.slots.map((slot, i) => (
           <li key={slot.sortOrder} className="flex gap-3">
             <div className="flex flex-col items-center">
-              <span className="font-mono text-[11px] leading-6 text-accent-green">
+              {/*
+                A passed slot is dimmed rather than hidden. It still explains the
+                shape of the day, and removing it would make the rail contradict
+                the plan the user was given at breakfast.
+              */}
+              <span
+                className={`font-mono text-[11px] leading-6 ${
+                  slot.isPast === true ? "text-ink-lo" : "text-accent-green"
+                }`}
+              >
                 {slot.slotTime}
               </span>
               {i < proposal.slots.length - 1 ? (
@@ -126,6 +192,24 @@ export function DayProposalView({
                   ]
                     .filter(Boolean)
                     .join(" · ")}
+                </p>
+              ) : null}
+
+              {/*
+                The delta is stated against the morning's figure rather than
+                replacing it silently. "38g" tells the user what to eat; "+12g vs
+                this morning's 26g" tells them the system reacted and why the
+                number moved, which is the whole promise of an adaptive plan.
+              */}
+              {slot.adjustmentNote ? (
+                <p className="mt-1.5 font-mono text-[11px] text-accent-green">
+                  {slot.adjustmentNote}
+                </p>
+              ) : null}
+
+              {slot.isPast === true ? (
+                <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">
+                  Time passed
                 </p>
               ) : null}
             </div>
