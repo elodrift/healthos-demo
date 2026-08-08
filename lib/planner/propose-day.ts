@@ -475,17 +475,14 @@ export function proposeDay(args: {
       profile.typicalWakeTime
         ? `No wake time from WHOOP today, so this uses your usual ${formatTime(wakeMins)}.`
         /*
-          This used to invite the user to correct the assumed wake time, which
-          the app cannot honour because no form writes `typicalWakeTime`: true of
-          the engine, false of the product. Stating the consequence is honest
-          without promising a control that does not exist. Restore the invitation
-          in the same change that ships the field.
-
-          (Phrased without the literal sentence on purpose —
-          test-profile-writable.ts greps this file for it, and a comment quoting
-          it verbatim would keep the guard red.)
+          The invitation is back, because the goal form now writes
+          `typicalWakeTime`. It was removed for one release when the field had no
+          write path anywhere in the app: the sentence was true of the engine and
+          false of the product, which is the worst kind of copy this codebase can
+          ship. Keep the consequence in front of the invitation — the user should
+          know what the guess costs before being asked to fix it.
         */
-        : `No wake data and no usual wake time on file, so this assumes ${formatTime(wakeMins)}, and every meal time below is offset from that guess.`,
+        : `No wake data and no usual wake time on file, so this assumes ${formatTime(wakeMins)}, and every meal time below is offset from that guess. Set your usual wake time on the goal page and the day re-plans around it.`,
     );
     trace.push({
       input: "WHOOP_WAKE",

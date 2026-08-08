@@ -31,7 +31,16 @@ const Body = z.object({
   carbG: z.number().int().min(0).max(400),
   fatG: z.number().int().min(0).max(200),
   confidence: z.enum(["LOW", "MEDIUM", "HIGH"]),
-  source: z.enum(["manual", "photo"]),
+  source: z.enum(["manual", "photo", "barcode"]),
+  /**
+   * Set only by the barcode flow, and only when the user weighed the portion.
+   *
+   * A scanned label makes the *composition* measured, but the weight is still
+   * whatever the person put on the plate. So this is not "did you scan a
+   * barcode" — it is "is the quantity known", which is the only reading that
+   * makes `estimated: false` an honest claim downstream.
+   */
+  weighed: z.boolean().optional(),
   /** Blob pathname from the upload route. Optional: meals can be typed in. */
   photoPathname: z.string().max(300).optional(),
   /**
@@ -74,9 +83,22 @@ export async function POST(request: NextRequest) {
       carbG: body.carbG,
       fatG: body.fatG,
       confidence: body.confidence,
-      // Always true. Even a hand-typed meal is an estimate unless it was
-      // weighed, and the app does not pretend otherwise.
-      estimated: true,
+      /*
+        Almost always true. Even a hand-typed meal is an estimate unless it was
+        weighed, and the app does not pretend otherwise.
+
+        The single exception is a scanned label with a weighed portion: the
+        composition comes off the manufacturer's packet and the quantity off a
+        scale, so nothing about the figure was inferred. Both halves are
+        required — a scan with a guessed portion stays an estimate, because the
+        macros are only as measured as the grams they were scaled from.
+
+        This flag is load-bearing: it feeds `anyEstimated` in the agent snapshot
+        and decides whether the planner's trace calls the day's intake MEASURED
+        or ASSUMED. Setting it on a scan alone would launder a guessed portion
+        into a measurement, which is the one thing this app must not do.
+      */
+      estimated: !(body.source === "barcode" && body.weighed === true),
       source: body.source,
       photoPathname: body.photoPathname ?? null,
     })

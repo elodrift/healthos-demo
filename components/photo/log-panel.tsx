@@ -11,15 +11,22 @@
 
 import { useState } from "react";
 
+import { BarcodeEntry } from "./barcode-entry";
 import { MealPhotoUpload } from "./meal-photo-upload";
 import { MealsToday } from "./meals-today";
 
 export function LogPanel() {
   const [refreshKey, setRefreshKey] = useState(0);
+  const bump = () => setRefreshKey((n) => n + 1);
 
   return (
     <>
-      <MealPhotoUpload onLogged={() => setRefreshKey((n) => n + 1)} />
+      <MealPhotoUpload onLogged={bump} />
+      {/*
+        Below the photo flow, not above it: the photo is the common path, and a
+        barcode only exists for packaged food. Both write to the same list.
+      */}
+      <BarcodeEntry onLogged={bump} />
       <MealsToday refreshKey={refreshKey} />
     </>
   );

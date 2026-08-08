@@ -13,6 +13,10 @@ type Props = {
     proteinTargetG: string;
     proteinFloorG: string;
     carbTargetG: string;
+    kcalTarget: string;
+    typicalWakeTime: string;
+    typicalSleepTime: string;
+    mealsPerDay: string;
   };
 };
 
@@ -260,6 +264,101 @@ export default function GoalForm({ initial }: Props) {
           This is the number your WHOOP strain moves: set it, and hard days raise it while easy
           days ease it back, with the reading and the adjustment shown in the day&apos;s trace.
           Left blank, strain is still recorded but changes nothing.
+        </p>
+      </fieldset>
+
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">
+          Daily calories <span className="normal-case tracking-normal">(optional)</span>
+        </legend>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="kcalTarget" className="text-[13px] font-medium text-ink-hi">
+            Target<span className="sr-only"> — daily calories</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="kcalTarget"
+              name="kcalTarget"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              defaultValue={initial.kcalTarget}
+              placeholder="2400"
+              aria-describedby="kcal-hint"
+              className="min-h-[44px] w-full rounded-lg border border-base-700 bg-base-900 px-3 text-[15px] text-ink-hi placeholder:text-ink-lo/60 outline-none transition-colors focus:border-accent-green/60"
+            />
+            <span className="font-mono text-[13px] text-ink-lo">kcal</span>
+          </div>
+        </div>
+
+        <p id="kcal-hint" className="text-[12px] leading-relaxed text-ink-mid">
+          Left blank, the day tracks what you eat without judging it against a number.
+        </p>
+      </fieldset>
+
+      {/*
+        The daily rhythm. These three were the last planner inputs with no write
+        path, and their absence was not neutral: every meal time on /live is an
+        offset from wake, so with nothing here the planner assumed 07:00 and three
+        meals, then built a schedule the user had no way to correct.
+      */}
+      <fieldset className="flex flex-col gap-3">
+        <legend className="mb-1 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">
+          Your usual day <span className="normal-case tracking-normal">(optional)</span>
+        </legend>
+
+        <div className="flex gap-2">
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label htmlFor="typicalWakeTime" className="text-[13px] font-medium text-ink-hi">
+              Wake
+            </label>
+            <input
+              id="typicalWakeTime"
+              name="typicalWakeTime"
+              type="time"
+              defaultValue={initial.typicalWakeTime}
+              aria-describedby="rhythm-hint"
+              className="min-h-[44px] w-full rounded-lg border border-base-700 bg-base-900 px-3 text-[15px] text-ink-hi outline-none transition-colors focus:border-accent-green/60"
+            />
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label htmlFor="typicalSleepTime" className="text-[13px] font-medium text-ink-hi">
+              Bed
+            </label>
+            <input
+              id="typicalSleepTime"
+              name="typicalSleepTime"
+              type="time"
+              defaultValue={initial.typicalSleepTime}
+              aria-describedby="rhythm-hint"
+              className="min-h-[44px] w-full rounded-lg border border-base-700 bg-base-900 px-3 text-[15px] text-ink-hi outline-none transition-colors focus:border-accent-green/60"
+            />
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <label htmlFor="mealsPerDay" className="text-[13px] font-medium text-ink-hi">
+              Meals
+            </label>
+            <input
+              id="mealsPerDay"
+              name="mealsPerDay"
+              type="text"
+              inputMode="numeric"
+              autoComplete="off"
+              defaultValue={initial.mealsPerDay}
+              placeholder="3"
+              aria-describedby="rhythm-hint"
+              className="min-h-[44px] w-full rounded-lg border border-base-700 bg-base-900 px-3 text-[15px] text-ink-hi placeholder:text-ink-lo/60 outline-none transition-colors focus:border-accent-green/60"
+            />
+          </div>
+        </div>
+
+        <p id="rhythm-hint" className="text-[12px] leading-relaxed text-ink-mid">
+          Your watch overrides the wake time whenever it has a reading. This is the fallback for
+          days it doesn&apos;t — without it the plan assumes 07:00 and every meal time below
+          inherits that guess.
         </p>
       </fieldset>
 

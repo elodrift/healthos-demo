@@ -121,9 +121,71 @@ export async function saveGoalContract(
   const carbParsed = parseGrams("carbTargetG", "carbohydrate", 10, 800);
   if (carbParsed !== null && typeof carbParsed === "object") return carbParsed;
 
+  /*
+    Calories. Wider still, because the rail has to admit both a small person in
+    a deficit and a large athlete in a surplus without rejecting either.
+  */
+  const kcalParsed = parseKcal();
+  if (kcalParsed !== null && typeof kcalParsed === "object") return kcalParsed;
+
+  function parseKcal(): number | null | { error: string } {
+    const raw = String(formData.get("kcalTarget") ?? "").trim();
+    if (!raw) return null;
+    if (!/^\d{3,5}$/.test(raw)) return { error: "Enter calories as a whole number." };
+    const n = Number(raw);
+    if (n < 800 || n > 6000) {
+      return { error: "Calories should be between 800 and 6000 a day." };
+    }
+    return n;
+  }
+
+  /*
+    The daily rhythm: wake time, bedtime, meal count.
+
+    These were the last planner inputs with no write path. Every meal time on
+    /live is an offset from wake, so with nothing on file the planner fell back
+    to 07:00 and built the whole schedule on a guess the user could not correct.
+    Same for the meal count, which silently assumed 3.
+
+    Stored as "HH:MM" text to match the column and `parseTime` in the planner.
+    A time input already constrains the format client-side, so this check is
+    defence against a hand-posted body rather than a typing aid.
+  */
+  function parseClock(field: string, noun: string): string | null | { error: string } {
+    const raw = String(formData.get(field) ?? "").trim();
+    if (!raw) return null;
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(raw)) {
+      return { error: `Enter ${noun} as a 24-hour time, like 07:00.` };
+    }
+    return raw;
+  }
+
+  const wakeParsed = parseClock("typicalWakeTime", "your usual wake time");
+  if (wakeParsed !== null && typeof wakeParsed === "object") return wakeParsed;
+  const sleepParsed = parseClock("typicalSleepTime", "your usual bedtime");
+  if (sleepParsed !== null && typeof sleepParsed === "object") return sleepParsed;
+
+  /*
+    Meals per day. The planner clamps this by control level (MINIMAL caps at 2,
+    PARTIAL at 3, FULL 3–6), so a value outside 1–8 could never survive anyway;
+    rejecting here means the stored number is the one the user actually chose
+    rather than something silently rewritten on read.
+  */
+  let mealsPerDay: number | null = null;
+  const mealsRaw = String(formData.get("mealsPerDay") ?? "").trim();
+  if (mealsRaw) {
+    if (!/^\d{1,2}$/.test(mealsRaw)) return { error: "Enter meals per day as a number." };
+    const n = Number(mealsRaw);
+    if (n < 1 || n > 8) return { error: "Meals per day should be between 1 and 8." };
+    mealsPerDay = n;
+  }
+
   const proteinTargetG = targetParsed;
   const proteinFloorG = floorParsed;
   const carbTargetG = carbParsed;
+  const kcalTarget = kcalParsed;
+  const typicalWakeTime = wakeParsed;
+  const typicalSleepTime = sleepParsed;
 
   // A floor above the target is contradictory: the floor exists as the reduced
   // commitment for low-control days, so this is almost always the two swapped.
@@ -145,6 +207,10 @@ export async function saveGoalContract(
     proteinTargetG,
     proteinFloorG,
     carbTargetG,
+    kcalTarget,
+    typicalWakeTime,
+    typicalSleepTime,
+    mealsPerDay,
     updatedAt: new Date(),
   };
 

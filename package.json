@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "verify": "npm run typecheck && npm run test:planner && npm run test:strip && npm run test:live && npm run test:whoop && npm run test:agent && npm run test:trace && npm run test:replan && npm run test:privacy && npm run test:writable",
     "test:writable": "tsx scripts/test-profile-writable.ts",
+    "test:barcode": "tsx scripts/test-barcode.ts",
     "test:replan": "tsx scripts/test-replan.ts",
     "test:live": "tsx scripts/test-live-day.ts",
     "test:whoop": "tsx scripts/test-whoop-redirect.ts",

@@ -56,6 +56,12 @@ export default async function GoalPage() {
           proteinTargetG: p?.proteinTargetG != null ? String(p.proteinTargetG) : "",
           proteinFloorG: p?.proteinFloorG != null ? String(p.proteinFloorG) : "",
           carbTargetG: p?.carbTargetG != null ? String(p.carbTargetG) : "",
+          kcalTarget: p?.kcalTarget != null ? String(p.kcalTarget) : "",
+          // Already "HH:MM" text in the column, so it round-trips into a time
+          // input without reformatting.
+          typicalWakeTime: p?.typicalWakeTime ?? "",
+          typicalSleepTime: p?.typicalSleepTime ?? "",
+          mealsPerDay: p?.mealsPerDay != null ? String(p.mealsPerDay) : "",
         }}
       />
     </main>

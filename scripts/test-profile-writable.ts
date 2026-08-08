@@ -41,11 +41,19 @@ function check(name: string, cond: boolean, detail?: string) {
  * the same change that adds the form field.
  */
 const KNOWN_UNSETTABLE: Record<string, string> = {
-  typicalWakeTime:
-    "planner falls back to DEFAULT_WAKE 07:00 and the whole meal schedule inherits it",
-  typicalSleepTime: "planner falls back to DEFAULT_SLEEP 23:00",
-  mealsPerDay: "slot count comes from controlLevel alone",
-  kcalTarget: "no per-slot kcal figure is ever shown",
+  /*
+    Empty, and that is the point.
+
+    This list held five entries. `carbTargetG` came off it when the carb field
+    shipped; the last four — typicalWakeTime, typicalSleepTime, mealsPerDay,
+    kcalTarget — came off when the goal form grew a calories field and a "your
+    usual day" fieldset. Every planner input is now reachable from the UI.
+
+    The bidirectional check is what forces this to stay true: a new planner field
+    with no write path fails immediately, and re-adding an entry here that IS
+    settable also fails. Do not add an entry to silence a failure — add the form
+    field, or accept that the feature is dead for real users.
+  */
 };
 
 const root = join(__dirname, "..");
@@ -120,15 +128,26 @@ for (const field of Object.keys(KNOWN_UNSETTABLE)) {
 
 /* --- copy may not promise an edit the app cannot perform ----------------- */
 {
-  // The wake-time fallback used to tell the user "Correct it and the day
-  // re-plans." while no UI could write typicalWakeTime — instructing them to do
-  // something impossible. Any such promise must outlive this guard only if the
-  // field is actually settable.
-  const promisesCorrection = /Correct it and the day re-plans/.test(plannerSrc);
+  /*
+    The wake-time fallback tells the user their wake time is settable. That
+    sentence was removed once, when nothing could write `typicalWakeTime`, and
+    restored when the goal form shipped the field.
+
+    Asserting only "no promise while unsettable" would now pass vacuously,
+    because KNOWN_UNSETTABLE is empty — so this asserts the promise BOTH ways:
+    the invitation must be present exactly when a write path exists. That means
+    deleting the form field without touching the copy fails here, which is the
+    regression this is really guarding against.
+  */
+  const invites = /and the day re-plans around it/.test(plannerSrc);
+  const wakeWritable = /\btypicalWakeTime\b/.test(actionSrc);
+
   check(
-    "no 'correct it' promise for a field with no write path",
-    !(promisesCorrection && "typicalWakeTime" in KNOWN_UNSETTABLE),
-    "planner copy invites the user to correct their wake time, but nothing can save it",
+    "wake-time copy matches reality (invitation present iff the field is writable)",
+    invites === wakeWritable,
+    invites
+      ? "planner copy invites the user to set their wake time, but no server action persists typicalWakeTime"
+      : "typicalWakeTime is writable, but the fallback copy never tells the user they can set it",
   );
 }
 
