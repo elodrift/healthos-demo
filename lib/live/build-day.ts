@@ -399,21 +399,40 @@ export async function buildLiveDay(
     });
 
     const training = pickTrainingWindow(workouts.records, day);
+    // Rounded because `kcalBurned` is an integer column: `kjToKcal` returns a
+    // float, and Postgres rejects it outright rather than truncating.
     const kcalBurned =
       cycle?.score_state === "SCORED" && cycle.score?.kilojoule !== undefined
-        ? kjToKcal(cycle.score.kilojoule)
+        ? Math.round(kjToKcal(cycle.score.kilojoule))
         : null;
 
-    await persistDaily(userId, signal, mainSleep, kcalBurned, day);
-    await db
-      .update(wearableConnection)
-      .set({ lastSyncedAt: now, syncError: null, updatedAt: now })
-      .where(
-        and(
-          eq(wearableConnection.userId, userId),
-          eq(wearableConnection.provider, "whoop"),
-        ),
-      );
+    /*
+     * Caching the reading is a side effect, not part of producing the plan.
+     *
+     * It used to sit inside the same `try` as the WHOOP calls, so a failed local
+     * write fell into the outage handler and the user was shown a stale cached
+     * plan captioned "WHOOP unreachable" — a false statement about a third party
+     * caused entirely by our own bug. A real instance of this (a float into an
+     * integer column) is what surfaced it. The live plan below is already
+     * computed and correct; a cache miss must not downgrade or misattribute it.
+     */
+    try {
+      await persistDaily(userId, signal, mainSleep, kcalBurned, day);
+      await db
+        .update(wearableConnection)
+        .set({ lastSyncedAt: now, syncError: null, updatedAt: now })
+        .where(
+          and(
+            eq(wearableConnection.userId, userId),
+            eq(wearableConnection.provider, "whoop"),
+          ),
+        );
+    } catch (persistError) {
+      // Logged rather than surfaced: the plan the user sees is live and accurate.
+      // The only user-visible consequence is that the freshness window cannot be
+      // honoured, so the next render re-fetches — which is the safe direction.
+      console.error("[live] failed to cache WHOOP reading:", persistError);
+    }
 
     return {
       status: "OK",
