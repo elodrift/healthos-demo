@@ -58,7 +58,13 @@ const collected = [
 
 const notCollected = [
   "No advertising or tracking cookies, and no third-party analytics or advertising SDKs.",
-  "No location data. Photo EXIF metadata, which can contain GPS coordinates, is stripped before a photo is stored.",
+  /*
+    Amended when EXIF capture time started being read. The previous wording —
+    "EXIF metadata is stripped" with nothing further — became untrue the moment
+    one field was read out of it, even though the stored file is just as clean.
+    A privacy claim has to describe what is read, not only what is kept.
+  */
+  "No location data. GPS coordinates are never read from a photo, and all EXIF metadata is stripped before the photo is stored. The one field read first is the capture time, so a meal is logged when you ate it rather than when you uploaded it; you are shown this on every upload.",
   "No sale of your data, and no sharing of it for advertising or profiling by anyone.",
 ];
 

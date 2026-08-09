@@ -18,6 +18,15 @@ interface UploadedPhoto {
   bytesBefore: number;
   bytesAfter: number;
   recognition: RecognitionResult;
+  /**
+   * Naive wall clock from EXIF ("YYYY-MM-DDTHH:MM"), or null when absent.
+   * Read on the server before the strip, which destroys the tag.
+   */
+  capturedAt: string | null;
+  /** Which EXIF tag it came from, so the receipt can be specific. */
+  capturedAtTag: string | null;
+  /** Whether GPS was present. Never the coordinates — those are never read. */
+  hadGps: boolean;
 }
 
 type State =
@@ -164,6 +173,29 @@ export function MealPhotoUpload({ onLogged }: { onLogged?: () => void }) {
               )}
             </dd>
             {/*
+              The counterpart to "Removed". Reading the capture time out of EXIF
+              means the receipt above is no longer the whole story: listing
+              "EXIF/XMP (APP1)" as removed, with nothing else said, would imply
+              every field in it was discarded. One was used.
+
+              Stating what was KEPT is what makes the removal list trustworthy
+              rather than merely reassuring, and it is the same rule the app
+              applies to planner inputs: name the thing that influenced the
+              result. GPS is reported as presence only — the coordinates are
+              never read from the buffer, so there is nothing here to leak.
+            */}
+            {state.photo.capturedAt ? (
+              <>
+                <dt className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">Kept</dt>
+                <dd className="mt-1.5 text-[13px] leading-relaxed text-ink-mid">
+                  The capture time, {new Date(state.photo.capturedAt).toLocaleString()} — used to log this
+                  meal at the time you ate it instead of now.
+                  {state.photo.hadGps ? " Location was in this photo and was discarded, not read." : ""}
+                </dd>
+              </>
+            ) : null}
+
+            {/*
               Rounding both sides to kB rendered as "2141kB -> 2141kB", which
               reads as though nothing happened and undercuts the whole receipt.
               The removed metadata is what matters here, so state it directly
@@ -180,6 +212,7 @@ export function MealPhotoUpload({ onLogged }: { onLogged?: () => void }) {
           <MealConfirm
             recognition={state.photo.recognition}
             photoPathname={state.photo.pathname}
+            capturedAt={state.photo.capturedAt}
             onLogged={() => {
               releasePreview();
               setState({ kind: "idle" });

@@ -19,7 +19,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { mealLog } from "@/lib/db/schema";
-import { localDay } from "@/lib/live/local-day";
+import { instantFromWallClock, localDay } from "@/lib/live/local-day";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
 
 export const dynamic = "force-dynamic";
@@ -49,6 +49,21 @@ const Body = z.object({
    * under tomorrow.
    */
   timeZone: z.string().min(1).max(60),
+  /**
+   * The photo's EXIF capture time as a naive wall clock ("YYYY-MM-DDTHH:MM"),
+   * forwarded from the upload route.
+   *
+   * No zone and no "Z" by design: EXIF records the wall clock the camera saw
+   * and nothing about where it was. It is read in `timeZone` below, which is an
+   * assumption the UI states rather than hides.
+   *
+   * When present this is the meal's real time, and it beats the server clock —
+   * a photo reviewed at 23:42 belongs to the brunch it shows, not to midnight.
+   */
+  capturedAt: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
+    .optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -69,7 +84,36 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "That photo does not belong to this account." }, { status: 403 });
   }
 
-  const day = localDay(new Date(), body.timeZone);
+  const now = new Date();
+
+  /*
+    When the meal actually happened.
+
+    Previously this was always `now`, i.e. upload time — so a photo taken at
+    brunch and uploaded that night was filed at midnight, and the planner's slot
+    reasoning ran against a day that never happened. A photo's capture time is
+    the one thing about it that is measured rather than inferred, so it wins
+    when we have it.
+
+    Guard rails, because EXIF is user-controlled input:
+      - A capture time in the future is impossible; fall back rather than
+        create a meal the day has not reached yet.
+      - Anything older than 30 days is almost certainly a saved or forwarded
+        image, not a meal being logged now. Filing it silently would move
+        totals on a day the user is no longer looking at.
+    In both cases we fall back to now and report which clock was used, so the
+    caller can say so instead of implying a precision it does not have.
+  */
+  const captured = body.capturedAt ? instantFromWallClock(body.capturedAt, body.timeZone) : null;
+
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const usable =
+    captured !== null && captured.getTime() <= now.getTime() && now.getTime() - captured.getTime() <= THIRTY_DAYS_MS;
+
+  const eatenAt = usable ? (captured as Date) : now;
+  const timeBasis: "photo-capture" | "upload" = usable ? "photo-capture" : "upload";
+
+  const day = localDay(eatenAt, body.timeZone);
   if (!day) return NextResponse.json({ error: "Unrecognised time zone." }, { status: 400 });
 
   const [row] = await db
@@ -77,6 +121,11 @@ export async function POST(request: NextRequest) {
     .values({
       userId: session.user.id,
       day,
+      /*
+        Explicit rather than relying on the column default, which is now() and
+        would reintroduce upload time for exactly the case this fixes.
+      */
+      loggedAt: eatenAt,
       description: body.description,
       kcal: body.kcal,
       proteinG: body.proteinG,
@@ -104,7 +153,12 @@ export async function POST(request: NextRequest) {
     })
     .returning({ id: mealLog.id });
 
-  return NextResponse.json({ id: row.id, day });
+  /*
+    `timeBasis` tells the caller which clock was used. Without it the UI would
+    have to guess, and a component that guesses is a component that eventually
+    asserts something false — the failure mode this codebase keeps hitting.
+  */
+  return NextResponse.json({ id: row.id, day, timeBasis });
 }
 
 export async function GET(request: NextRequest) {

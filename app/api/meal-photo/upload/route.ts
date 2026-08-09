@@ -4,6 +4,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { recognizeFood } from "@/lib/food/recognize";
+import { formatWallClock, readCaptureTime } from "@/lib/photo/capture-time";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
 import { assertNoResidualMetadata, MAX_PHOTO_BYTES, stripImageMetadata } from "@/lib/photo/strip-metadata";
 
@@ -75,6 +76,19 @@ export async function POST(request: NextRequest) {
   }
 
   const original = Buffer.from(await file.arrayBuffer());
+
+  /*
+    Read the capture timestamp BEFORE stripping, because the strip destroys the
+    tag that carries it. This is the one fact a food photo actually measures,
+    and it was being thrown away: the meal was previously filed against upload
+    time, so photos reviewed late at night landed at midnight.
+
+    This does not weaken the privacy promise. Only the timestamp is extracted —
+    GPS is reported as a presence boolean and its coordinates are never read,
+    and the bytes that reach Blob are stripped exactly as before.
+  */
+  const capture = readCaptureTime(original);
+
   const result = stripImageMetadata(original);
 
   // A format we cannot parse is a format whose GPS we cannot remove. Refusing
@@ -117,5 +131,14 @@ export async function POST(request: NextRequest) {
     bytesBefore: result.bytesBefore,
     bytesAfter: result.bytesAfter,
     recognition,
+    /*
+      A naive wall-clock string with no zone or "Z" suffix, because EXIF has no
+      zone. Attaching one here would assert an offset the camera never recorded;
+      the client reads it in the user's own zone and the UI says so.
+    */
+    capturedAt: capture.capturedAt ? formatWallClock(capture.capturedAt) : null,
+    capturedAtTag: capture.capturedAt?.tag ?? null,
+    /* Presence only — coordinates are never read, so none can leak here. */
+    hadGps: capture.hadGps,
   });
 }
