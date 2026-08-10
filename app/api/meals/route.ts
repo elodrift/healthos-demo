@@ -9,18 +9,25 @@
  * Every query is scoped to the session user. Neon has no RLS, so ownership is
  * enforced here on every read and write — there is no filter-free path to this
  * table.
+ *
+ * Responses go out through `jsonPrivate`, which sets `Cache-Control: private,
+ * no-store`. `dynamic = "force-dynamic"` governs Next's caches only and sets no
+ * response header, so before this every reply carrying a user's meal log left
+ * the origin with no instruction about who was allowed to store it.
  */
 
 import { and, desc, eq } from "drizzle-orm";
 import { headers } from "next/headers";
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { mealLog } from "@/lib/db/schema";
 import { instantFromWallClock, localDay } from "@/lib/live/local-day";
+import { jsonPrivate } from "@/lib/http";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -68,20 +75,25 @@ const Body = z.object({
 
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: headers() });
-  if (!session?.user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  if (!session?.user) return jsonPrivate({ error: "Not signed in." }, { status: 401 });
+
+  const limit = checkRateLimit("write", session.user.id);
+  if (!limit.ok) {
+    return tooManyRequests("Too many meals logged at once. Give it a moment.", limit.retryAfter);
+  }
 
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await request.json());
   } catch {
-    return NextResponse.json({ error: "That meal could not be read." }, { status: 400 });
+    return jsonPrivate({ error: "That meal could not be read." }, { status: 400 });
   }
 
   // A photo may only be attached if it lives under this user's own prefix.
   // Without this check a caller could staple someone else's photo to their meal
   // and then read it back through the delivery route, which trusts ownership.
   if (body.photoPathname && !body.photoPathname.startsWith(mealPhotoPrefix(session.user.id))) {
-    return NextResponse.json({ error: "That photo does not belong to this account." }, { status: 403 });
+    return jsonPrivate({ error: "That photo does not belong to this account." }, { status: 403 });
   }
 
   const now = new Date();
@@ -114,7 +126,7 @@ export async function POST(request: NextRequest) {
   const timeBasis: "photo-capture" | "upload" = usable ? "photo-capture" : "upload";
 
   const day = localDay(eatenAt, body.timeZone);
-  if (!day) return NextResponse.json({ error: "Unrecognised time zone." }, { status: 400 });
+  if (!day) return jsonPrivate({ error: "Unrecognised time zone." }, { status: 400 });
 
   const [row] = await db
     .insert(mealLog)
@@ -158,16 +170,16 @@ export async function POST(request: NextRequest) {
     have to guess, and a component that guesses is a component that eventually
     asserts something false — the failure mode this codebase keeps hitting.
   */
-  return NextResponse.json({ id: row.id, day, timeBasis });
+  return jsonPrivate({ id: row.id, day, timeBasis });
 }
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: headers() });
-  if (!session?.user) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+  if (!session?.user) return jsonPrivate({ error: "Not signed in." }, { status: 401 });
 
   const timeZone = request.nextUrl.searchParams.get("tz") ?? "UTC";
   const day = localDay(new Date(), timeZone);
-  if (!day) return NextResponse.json({ error: "Unrecognised time zone." }, { status: 400 });
+  if (!day) return jsonPrivate({ error: "Unrecognised time zone." }, { status: 400 });
 
   const meals = await db
     .select()
@@ -175,5 +187,5 @@ export async function GET(request: NextRequest) {
     .where(and(eq(mealLog.userId, session.user.id), eq(mealLog.day, day)))
     .orderBy(desc(mealLog.loggedAt));
 
-  return NextResponse.json({ day, meals });
+  return jsonPrivate({ day, meals });
 }

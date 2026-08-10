@@ -9,6 +9,11 @@
  */
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
+  {
+    // Named group the `report-to` directive above refers to.
+    key: "Reporting-Endpoints",
+    value: 'csp-endpoint="/api/csp-report"',
+  },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   { key: "Strict-Transport-Security", value: "max-age=63072000" },
 
@@ -57,6 +62,14 @@ const securityHeaders = [
       "frame-ancestors 'self'",
       "base-uri 'self'",
       "form-action 'self'",
+      /*
+        Without a report target, Report-Only mode is a no-op: it blocks nothing
+        and the browser has nowhere to send the violations that are the whole
+        point of the mode. `report-uri` is deprecated but still the only
+        directive Safari honours, so both are sent.
+      */
+      "report-uri /api/csp-report",
+      "report-to csp-endpoint",
     ].join("; "),
   },
 ];

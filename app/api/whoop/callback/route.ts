@@ -9,7 +9,10 @@ import {
   exchangeCodeForTokens,
   fetchProfile,
   saveWhoopTokens,
+  whoopRedirectOrigin,
 } from "@/lib/whoop/client";
+import { publicOrigin } from "@/lib/env";
+import { log } from "@/lib/log";
 import { WHOOP_STATE_COOKIE } from "@/lib/whoop/oauth-state";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +25,17 @@ export const dynamic = "force-dynamic";
  * answers 302 to an unauthorized page, which would swallow the `code`.
  */
 export async function GET(request: NextRequest) {
-  const origin = getOrigin();
+  // The redirect must land on the origin WHOOP was registered against, or the
+  // session/state cookies set there won't be present on return — see
+  // whoopRedirectOrigin()'s own comment. publicOrigin() is the fallback for
+  // when WHOOP credentials aren't configured at all, which is a different,
+  // already-reported failure and not this route's to diagnose.
+  let origin: string;
+  try {
+    origin = whoopRedirectOrigin();
+  } catch {
+    origin = publicOrigin();
+  }
   const params = request.nextUrl.searchParams;
   const fail = (reason: string) =>
     NextResponse.redirect(
@@ -92,7 +105,16 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.redirect(new URL("/connect/whoop?connected=1", origin));
   } catch (err) {
-    return fail(err instanceof Error ? err.message : "Unknown error.");
+    /*
+      The upstream message is logged, not reflected. It used to be interpolated
+      straight into the redirect URL and rendered on /connect/whoop, which put
+      whatever WHOOP's token endpoint returned — upstream error bodies, request
+      detail, anything a failing exchange happens to include — onto a page in the
+      user's browser. The user gets a stable sentence; the detail goes to the log
+      where it is actually useful.
+    */
+    log.error("whoop.callback_failed", { userId: session.user.id }, err);
+    return fail("The WHOOP connection could not be completed. Try again.");
   }
 }
 
@@ -104,9 +126,21 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB);
 }
 
-function getOrigin(): string {
-  const h = headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  return `${proto}://${host}`;
-}
+/*
+  `getOrigin()` used to live here and built the redirect target from the
+  `X-Forwarded-Host` / `Host` request headers. That is an open redirect: both are
+  attacker-supplied on any request that does not pass through a proxy which
+  overwrites them, so a crafted `Host` would send this route's redirect — arriving
+  immediately after a successful WHOOP token exchange — to another origin.
+
+  It is now `whoopRedirectOrigin()` in lib/whoop/client.ts — the origin half of
+  the redirect URI actually registered with WHOOP — falling back to
+  `publicOrigin()` in lib/env.ts (BETTER_AUTH_URL or the Vercel-injected project
+  URL) only when that throws, i.e. when WHOOP credentials aren't configured at
+  all. A redirect target must come from configuration, never from the request.
+  Preferring whoopRedirectOrigin() over publicOrigin() matters here specifically:
+  the state cookie and session cookie are both scoped to the origin that set
+  them, so if this route redirected via a different-but-valid configured origin
+  than the one WHOOP actually returns the user to, the callback would arrive
+  holding neither cookie.
+*/
