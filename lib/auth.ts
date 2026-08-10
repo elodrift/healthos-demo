@@ -66,6 +66,28 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 days
     updateAge: 60 * 60 * 24, // 1 day
   },
+  /*
+    Credential endpoints, throttled explicitly.
+
+    Better Auth enables a default limiter in production, but leaving it implicit
+    means the sign-in ceiling is whatever the library ships next — and sign-in is
+    the one endpoint where the ceiling is the entire defence against credential
+    stuffing. Stating it here makes it a decision with a number attached.
+
+    5 attempts a minute is generous for a human typing a password and useless for
+    a list. The memory store shares the caveat in lib/rate-limit.ts: per-instance,
+    reset on redeploy. Move both to Redis together.
+  */
+  rateLimit: {
+    enabled: true,
+    window: 60,
+    max: 100,
+    customRules: {
+      "/sign-in/email": { window: 60, max: 5 },
+      "/sign-up/email": { window: 60 * 60, max: 10 },
+      "/forget-password": { window: 60 * 60, max: 5 },
+    },
+  },
   ...(process.env.NODE_ENV === "development"
     ? {
         advanced: {

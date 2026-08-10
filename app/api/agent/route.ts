@@ -23,15 +23,18 @@
 import { generateText } from "ai";
 import { asc, eq } from "drizzle-orm";
 import { headers } from "next/headers";
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { classify } from "@/lib/agent/nlu";
 import { checkRateLimit } from "@/lib/agent/rate-limit";
+import { tooManyRequests } from "@/lib/rate-limit";
 import { respond } from "@/lib/agent/respond";
 import { buildAgentSnapshot, type AgentSnapshot } from "@/lib/agent/snapshot";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { jsonPrivate } from "@/lib/http";
+import { log } from "@/lib/log";
 import { chatMessage } from "@/lib/db/schema";
 
 export const dynamic = "force-dynamic";
@@ -92,23 +95,20 @@ function systemPrompt(snap: AgentSnapshot): string {
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: headers() });
   if (!session?.user) {
-    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+    return jsonPrivate({ error: "Not signed in." }, { status: 401 });
   }
   const userId = session.user.id;
 
   const limit = checkRateLimit(userId);
   if (!limit.ok) {
-    return NextResponse.json(
-      { error: "Too many messages in a row. Give it a moment." },
-      { status: 429, headers: { "Retry-After": String(limit.retryAfter ?? 60) } },
-    );
+    return tooManyRequests("Too many messages in a row. Give it a moment.", limit.retryAfter);
   }
 
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await request.json());
   } catch {
-    return NextResponse.json({ error: "That message could not be read." }, { status: 400 });
+    return jsonPrivate({ error: "That message could not be read." }, { status: 400 });
   }
 
   const snapshot = await buildAgentSnapshot(userId, body.timeZone);
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
     { userId, role: "agent", text, source },
   ]);
 
-  return NextResponse.json({ text, source, intent: intent.kind });
+  return jsonPrivate({ text, source, intent: intent.kind });
 }
 
 /**
@@ -167,7 +167,9 @@ async function tryModels(
       const trimmed = text.trim();
       if (trimmed) return { text: trimmed, source: "model" };
     } catch (error) {
-      console.log("[v0] agent model failed", model, error instanceof Error ? error.message : error);
+      // Structured so a recurring model outage is queryable in the log drain
+      // rather than a string nobody greps for. No user content is included.
+      log.warn("agent.model_failed", { model }, error);
     }
   }
   return {

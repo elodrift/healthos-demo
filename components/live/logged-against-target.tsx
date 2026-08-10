@@ -37,16 +37,23 @@ interface Meal {
   estimated: boolean;
 }
 
-const fetcher = async (url: string) => {
-  const res = await fetch(url);
+type MealsResponse = { day: string; meals: Meal[] };
+
+const fetcher = async (url: string): Promise<MealsResponse> => {
+  // A hung request leaves the panel on "Checking what you have logged…" forever.
+  // An explicit deadline turns that into the error branch, which says something true.
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error("failed");
-  return res.json() as Promise<{ day: string; meals: Meal[] }>;
+  return res.json() as Promise<MealsResponse>;
 };
 
 export function LoggedAgainstTarget({ dayTarget }: { dayTarget: DayTarget }) {
   // The browser's zone decides which day this is; the server must not guess it.
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const { data, error, isLoading } = useSWR(
+  // Explicit generic. Without it SWR infers `data` as `any`, which makes every
+  // `.map`/`.reduce` callback below an implicit-any error under `strict` — the
+  // 7 errors a clean `npm run typecheck` reported before this change.
+  const { data, error, isLoading } = useSWR<MealsResponse>(
     `/api/meals?tz=${encodeURIComponent(tz)}`,
     fetcher,
     // The plan is server-rendered per request, so a stale total sitting beside a

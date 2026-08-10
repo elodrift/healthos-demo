@@ -29,10 +29,12 @@ interface Meal {
   loggedAt: string;
 }
 
-const fetcher = async (url: string) => {
-  const res = await fetch(url);
+type MealsResponse = { day: string; meals: Meal[] };
+
+const fetcher = async (url: string): Promise<MealsResponse> => {
+  const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   if (!res.ok) throw new Error("failed");
-  return res.json() as Promise<{ day: string; meals: Meal[] }>;
+  return res.json() as Promise<MealsResponse>;
 };
 
 function sum(meals: Meal[], key: "kcal" | "proteinG" | "carbG" | "fatG") {
@@ -42,11 +44,13 @@ function sum(meals: Meal[], key: "kcal" | "proteinG" | "carbG" | "fatG") {
 export function MealsToday({ refreshKey }: { refreshKey: number }) {
   // The browser's zone decides which day this is; the server must not guess it.
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const { data, error, isLoading } = useSWR(
+  // Explicit generics: the tuple key defeats SWR's fetcher inference, so without
+  // them `data` is `any` and every callback below is an implicit-any error.
+  const { data, error, isLoading } = useSWR<MealsResponse, Error, [string, number]>(
     // refreshKey is part of the cache key so logging a meal refetches instead of
     // showing a stale list from before the write.
     [`/api/meals?tz=${encodeURIComponent(tz)}`, refreshKey],
-    ([url]) => fetcher(url),
+    ([url]: [string, number]) => fetcher(url),
   );
 
   if (isLoading) {

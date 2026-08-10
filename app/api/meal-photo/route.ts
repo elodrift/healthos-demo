@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { type NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { log } from "@/lib/log";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: headers() });
   if (!session?.user) {
-    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+    return NextResponse.json({ error: "Not signed in." }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
   }
 
   const pathname = request.nextUrl.searchParams.get("pathname");
@@ -60,7 +61,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("[v0] meal photo fetch failed", error);
+    log.error("photo.fetch_failed", {}, error);
     return NextResponse.json({ error: "That photo could not be loaded." }, { status: 500 });
   }
 }

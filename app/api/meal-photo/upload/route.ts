@@ -1,9 +1,12 @@
 import { put } from "@vercel/blob";
 import { headers } from "next/headers";
-import { type NextRequest, NextResponse } from "next/server";
+import { type NextRequest } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { log } from "@/lib/log";
 import { recognizeFood } from "@/lib/food/recognize";
+import { jsonPrivate } from "@/lib/http";
+import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { formatWallClock, readCaptureTime } from "@/lib/photo/capture-time";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
 import { assertNoResidualMetadata, MAX_PHOTO_BYTES, stripImageMetadata } from "@/lib/photo/strip-metadata";
@@ -34,15 +37,43 @@ export const maxDuration = 45;
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: headers() });
   if (!session?.user) {
-    return NextResponse.json({ error: "Not signed in." }, { status: 401 });
+    return jsonPrivate({ error: "Not signed in." }, { status: 401 });
   }
 
-  // Reject oversized uploads before buffering the body into memory.
-  const declaredLength = Number(request.headers.get("content-length") ?? 0);
-  if (declaredLength > MAX_PHOTO_BYTES) {
-    return NextResponse.json(
+  /*
+    This endpoint strips metadata, writes to blob storage and calls a paid vision
+    model, with maxDuration 45. Unmetered, a client retry loop is both a bill and
+    a queue of blocked invocations, so it is capped before any of that starts.
+  */
+  const limit = checkRateLimit("photoUpload", session.user.id);
+  if (!limit.ok) {
+    return tooManyRequests(
+      "Too many photos at once. Give the last one a moment to finish.",
+      limit.retryAfter,
+    );
+  }
+
+  /*
+    Reject oversized uploads before buffering the body into memory.
+
+    `Number.isFinite` matters more than it looks. `content-length` is absent on a
+    chunked upload and non-numeric if a client sends garbage; the previous
+    `Number(header ?? 0)` produced `NaN` in the second case, and `NaN > MAX` is
+    false, so the request sailed past the guard and into `request.formData()` —
+    which buffers the whole body. The size check further down still caught it,
+    but only after the memory had already been spent, which is exactly what this
+    early check exists to prevent.
+
+    An absent header is treated as unknown rather than zero: it cannot be
+    pre-screened, so it is allowed through to the `file.size` check with the
+    buffering cost accepted knowingly rather than by accident.
+  */
+  const rawLength = request.headers.get("content-length");
+  const declaredLength = rawLength === null ? null : Number(rawLength);
+  if (declaredLength !== null && Number.isFinite(declaredLength) && declaredLength > MAX_PHOTO_BYTES) {
+    return jsonPrivate(
       {
-        error: `That photo is ${(declaredLength / 1_000_000).toFixed(1)}MB. The limit is ${
+        error: `That photo is ${((declaredLength ?? 0) / 1_000_000).toFixed(1)}MB. The limit is ${
           MAX_PHOTO_BYTES / 1_000_000
         }MB because every photo is scrubbed of location data on the server before it is stored. Most phones can share a smaller copy.`,
       },
@@ -56,16 +87,16 @@ export async function POST(request: NextRequest) {
     const candidate = formData.get("file");
     if (candidate instanceof File) file = candidate;
   } catch {
-    return NextResponse.json({ error: "That upload could not be read. Please try again." }, { status: 400 });
+    return jsonPrivate({ error: "That upload could not be read. Please try again." }, { status: 400 });
   }
 
   if (!file || file.size === 0) {
-    return NextResponse.json({ error: "No photo was attached." }, { status: 400 });
+    return jsonPrivate({ error: "No photo was attached." }, { status: 400 });
   }
 
   // content-length covers the whole multipart envelope; check the part too.
   if (file.size > MAX_PHOTO_BYTES) {
-    return NextResponse.json(
+    return jsonPrivate(
       {
         error: `That photo is ${(file.size / 1_000_000).toFixed(1)}MB, over the ${
           MAX_PHOTO_BYTES / 1_000_000
@@ -94,15 +125,15 @@ export async function POST(request: NextRequest) {
   // A format we cannot parse is a format whose GPS we cannot remove. Refusing
   // is the only honest option; storing it would quietly break the promise.
   if (!result.supported) {
-    return NextResponse.json({ error: result.reason ?? "That image format is not supported." }, { status: 415 });
+    return jsonPrivate({ error: result.reason ?? "That image format is not supported." }, { status: 415 });
   }
 
   // Defence in depth: prove the strip worked rather than trusting it. If a
   // marker survived, fail closed instead of storing a located photo.
   const residual = assertNoResidualMetadata(result.data, result.format);
   if (residual) {
-    console.error("[v0] strip verification failed", { format: result.format, residual });
-    return NextResponse.json(
+    log.error("photo.strip_verification_failed", { format: result.format, residual });
+    return jsonPrivate(
       { error: "That photo could not be cleaned of location data, so it was not saved." },
       { status: 422 },
     );
@@ -123,7 +154,7 @@ export async function POST(request: NextRequest) {
   // user to typing the meal in, not lose their photo.
   const recognition = await recognizeFood(result.data, `image/${result.format}`);
 
-  return NextResponse.json({
+  return jsonPrivate({
     // Deliberately the pathname, not blob.url: a private blob URL is not
     // publicly fetchable, and returning it would invite a broken <img src>.
     pathname: blob.pathname,

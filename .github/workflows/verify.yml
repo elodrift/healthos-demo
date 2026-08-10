@@ -1,0 +1,85 @@
+# The gate. `npm run verify` already existed and already knew how to check this
+# repo — nothing ran it except a person who remembered to. That is the gap this
+# closes: a clean clone of this branch failed `npm run typecheck` with 7 errors
+# while the working copy passed, because the working copy had a warm
+# .tsbuildinfo and a different resolved dependency tree. CI has neither.
+#
+# Make this a required status check in Settings -> Branches before merging to main.
+
+name: verify
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly the lockfile and
+      # fails if package.json and the lock have drifted. That drift is what let a
+      # broken swr build in without anyone noticing.
+      - run: npm ci
+
+      # Typecheck first — it is the fastest signal and the one that was broken.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Static audit. Fails only on critical findings so it can be adopted
+      # without a big-bang cleanup; tighten to `--fail-on high` once the backlog
+      # in AUDIT-REPORT.md is cleared.
+      #
+      # SEC001 (Next 14 is past end-of-life) is a true finding, ignored here as
+      # a tracked exception so the gate is green from day one. Its expiry is the
+      # Next 15.5 migration PR — remove the --ignore in that PR.
+      - name: Static audit
+        run: node audit/audit.mjs --fail-on critical --ignore SEC001
+
+      # Known vulnerable dependencies. `--audit-level=high` keeps the noise down.
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      # Offline tests only. The scripts that hit Neon, WHOOP or Open Food Facts
+      # live cannot run deterministically here, and running test:barcode in CI
+      # would spend the shared Open Food Facts rate budget on every push.
+      - name: Offline tests
+        run: |
+          npm run test:limits
+          npm run test:planner
+          npm run test:strip
+          npm run test:capture
+          npm run test:live
+          npm run test:whoop
+          npm run test:agent
+          npm run test:trace
+          npm run test:replan
+
+      # The build is the only thing that type-checks generated route types and
+      # catches invalid route exports, which tsc alone does not see.
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+          # Build-time only. Compiling requires these to exist; nothing here
+          # ever reaches a running server, and real values live in Vercel's
+          # project settings.
+          BETTER_AUTH_SECRET: "ci-build-placeholder-not-a-real-secret-0000"
+          DATABASE_URL: "postgres://ci:ci@localhost:5432/ci"
