@@ -19,6 +19,12 @@ interface Meal {
   fatG: number | null;
   confidence: string;
   source: string;
+  /**
+   * False only for a scanned label with a weighed portion. The route sets it, so
+   * the list can describe its own total without inferring anything from
+   * `source` — a barcode scan with a guessed portion is still an estimate.
+   */
+  estimated: boolean;
   photoPathname: string | null;
   loggedAt: string;
 }
@@ -65,12 +71,24 @@ export function MealsToday({ refreshKey }: { refreshKey: number }) {
     return (
       <section className="rounded-2xl border border-dashed border-base-700 p-4">
         <h2 className="text-[14px] font-semibold tracking-tight text-ink-mid">Nothing logged today</h2>
+        {/*
+          This used to end "Both end up as estimates", which stopped being true
+          when the barcode flow shipped — a weighed label read is not an
+          estimate, and the copy would have quietly contradicted the total.
+        */}
         <p className="mt-1 text-[13px] leading-relaxed text-ink-lo">
-          Add a photo above, or type a meal in by hand. Both end up as estimates.
+          Add a photo, type a meal in by hand, or scan a packet. Only a scanned label with a
+          weighed portion counts as measured; everything else is an estimate.
         </p>
       </section>
     );
   }
+
+  // Rows the API marked as not-estimated, i.e. a label read plus a weighed
+  // portion. `=== false` rather than a falsy check: an older row that predates
+  // the column would come back undefined and must not count as measured.
+  const measuredCount = data.meals.filter((m) => m.estimated === false).length;
+  const allEstimated = measuredCount === 0;
 
   const totals = {
     kcal: sum(data.meals, "kcal"),
@@ -123,8 +141,16 @@ export function MealsToday({ refreshKey }: { refreshKey: number }) {
       </ul>
 
       <dl className="mt-3 border-t border-base-700 pt-3">
+        {/*
+          The heading has to track the data, not the common case. Before the
+          barcode flow existed every row was an estimate and "Sum of estimates"
+          was simply true; a weighed scan makes it false, and a total that
+          understates its own reliability is the same class of error as one that
+          overstates it. `estimated` comes from the row, so this asserts only
+          what the list actually contains.
+        */}
         <dt className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">
-          Sum of estimates
+          {allEstimated ? "Sum of estimates" : "Today's total"}
         </dt>
         <dd className="mt-1 font-mono text-[15px] text-ink-hi">
           {totals.kcal} kcal · {totals.protein}g protein
@@ -136,10 +162,16 @@ export function MealsToday({ refreshKey }: { refreshKey: number }) {
           The honest caveat, stated where the total is read rather than buried in
           a policy page. Four stacked estimates carry more error than any one of
           them, and the sum should not look more solid than its parts.
+
+          The mixed case gets its own sentence rather than the estimate wording:
+          saying "these are estimates" over a total that includes weighed label
+          readings would understate it, and a caveat that is wrong in either
+          direction stops being useful.
         */}
         <dd className="mt-2 text-[12px] leading-relaxed text-ink-lo">
-          These are estimates added together, not a measured intake. Treat the protein figure as the
-          one worth acting on.
+          {allEstimated
+            ? "These are estimates added together, not a measured intake. Treat the protein figure as the one worth acting on."
+            : `${measuredCount} of ${data.meals.length} came from a weighed label reading; the rest are estimates. The total is only as firm as the weakest row in it.`}
         </dd>
       </dl>
     </section>

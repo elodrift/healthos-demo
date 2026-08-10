@@ -1,6 +1,7 @@
 import {
   boolean,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -292,6 +293,43 @@ export const mealSlot = pgTable(
 );
 
 /**
+ * The conversation, one row per turn.
+ *
+ * Persisted rather than held in React state because the chat is the primary
+ * surface (DNA §7 rules for "dark, chat-first, engine-visible"), and a surface
+ * that forgets everything on refresh is a demo of a chat, not a chat.
+ *
+ * `source` records who actually produced the text — "local" for the
+ * deterministic matcher, "model" for the LLM fallback, "degraded" when no model
+ * was reachable. §4.11 forbids presenting an assumption in the same voice as a
+ * measurement, and the same applies to our own machinery: a reply the engine
+ * derived and a reply a model improvised are different kinds of claim, so the
+ * distinction is stored rather than flattened.
+ *
+ * There is deliberately no `macros` column. A turn that logs food writes a
+ * `meal_log` row and references it; duplicating the numbers here would create a
+ * second, drifting source of truth for the macro header.
+ */
+export const chatMessage = pgTable(
+  "chat_message",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("userId").notNull(),
+    /** "user" | "agent" */
+    role: text("role").notNull(),
+    text: text("text").notNull(),
+    /** "user" | "local" | "model" | "degraded" */
+    source: text("source").notNull().default("local"),
+    /** Set when this turn caused a meal to be logged, so the UI can link them. */
+    mealLogId: integer("mealLogId"),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    userCreated: index("chat_message_user_created_idx").on(t.userId, t.createdAt),
+  }),
+);
+
+/**
  * A meal that actually happened. Separate from mealSlot on purpose: a plan is
  * not a log, and only rows here are allowed to move the macro header.
  *
@@ -329,5 +367,63 @@ export const mealLog = pgTable(
   },
   (t) => ({
     userDay: index("meal_log_user_day_idx").on(t.userId, t.day),
+  }),
+);
+
+/**
+ * The friend graph. DNA §8 reserved "build order and privacy model" for the
+ * founder; the ruling was **mutual accept only**, so a row is a relationship
+ * only once `status = 'accepted'`.
+ *
+ * A pending request grants nothing. Visibility checks must test for
+ * `accepted`, never merely for the existence of a row, or an unanswered
+ * request would leak the graph it was asking to join.
+ *
+ * The pair is deduplicated in Postgres with a unique index on
+ * `(LEAST(requesterId, addresseeId), GREATEST(...))`, which makes A→B and B→A
+ * the same pair. Enforcing that in application code instead would leave a race
+ * where two simultaneous requests create reciprocal rows that each look
+ * unaccepted.
+ */
+export const friendship = pgTable("friendship", {
+  id: serial("id").primaryKey(),
+  requesterId: text("requesterId").notNull(),
+  addresseeId: text("addresseeId").notNull(),
+  /** "pending" | "accepted" | "declined" */
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  respondedAt: timestamp("respondedAt"),
+});
+
+/**
+ * A place the user plans to eat or has eaten — the Block 6 check-in map.
+ *
+ * `sharedWithFriends` is `NOT NULL DEFAULT false`, which is the founder's
+ * §8 privacy ruling ("nothing until explicitly shared") expressed as a column
+ * default rather than a convention. A check-in written by any future code path
+ * that forgets about privacy is private, because the database decided so.
+ *
+ * There are deliberately no macro columns. Per the §8 ruling, sharing conveys
+ * place and time only — never what was eaten — so friend-visible nutrition
+ * data cannot leak from a table that never stored it. The earlier community
+ * fixture attached invented kcal ranges to real restaurant names, which is
+ * exactly the §4.11 violation this shape forecloses.
+ */
+export const checkIn = pgTable(
+  "check_in",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("userId").notNull(),
+    placeName: text("placeName").notNull(),
+    lat: doublePrecision("lat"),
+    lon: doublePrecision("lon"),
+    note: text("note"),
+    /** Set when this is an intention rather than a record. */
+    plannedFor: timestamp("plannedFor"),
+    sharedWithFriends: boolean("sharedWithFriends").notNull().default(false),
+    createdAt: timestamp("createdAt").notNull().defaultNow(),
+  },
+  (t) => ({
+    userCreated: index("check_in_user_created_idx").on(t.userId, t.createdAt),
   }),
 );

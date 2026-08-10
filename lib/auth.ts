@@ -75,6 +75,27 @@ export const auth = betterAuth({
           defaultCookieAttributes: {
             sameSite: "none" as const,
             secure: true,
+            /*
+              CHIPS. `SameSite=None; Secure` alone is NOT enough any more:
+              Chrome's third-party-cookie restrictions block an *unpartitioned*
+              SameSite=None cookie inside a cross-site iframe, which is exactly
+              how the preview embeds this app (healthos.v0.build inside v0.app).
+
+              Measured, not assumed. The wire showed
+                Set-Cookie: __Secure-better-auth.session_token=…;
+                            Path=/; HttpOnly; Secure; SameSite=None
+              with no `Partitioned`, and the server log showed the consequence:
+                POST /api/auth/sign-in/email 200   <- credentials fine
+                GET  /onboarding             307   <- cookie not sent back
+                GET  /sign-in                200   <- silently bounced
+              i.e. sign-in succeeded and the very next navigation was anonymous,
+              landing the user back on the form with no error. "Nothing happens."
+
+              `Partitioned` opts into a per-top-level-site cookie jar, which is
+              the supported way to keep a session inside an embedded frame.
+              It requires Secure and Path=/, both already set above.
+            */
+            partitioned: true,
           },
         },
       }

@@ -58,7 +58,31 @@ function credentials() {
 
 /** The app's registered redirect URI, resolved per environment. */
 export function whoopRedirectUri(): string {
+  /*
+   * On production the stable production domain wins over
+   * WHOOP_REDIRECT_BASE_URL; everywhere else the env var still takes precedence.
+   *
+   * The env var used to win unconditionally, which is the wrong way round for the
+   * one environment that matters. A single WHOOP_REDIRECT_BASE_URL applies to
+   * every environment, so whatever value makes local or preview work — and in
+   * this project it is currently a preview URL — would follow the code to
+   * production and be sent as `redirect_uri` there. WHOOP compares that against
+   * its registered URI and rejects the mismatch, so connecting fails on the
+   * deployed app while working perfectly in preview. Worse, the deploy itself
+   * looks entirely healthy: nothing throws until a user clicks Connect.
+   *
+   * Preferring VERCEL_PROJECT_PRODUCTION_URL when VERCEL_ENV === "production"
+   * makes production self-configuring and keeps the override useful for the
+   * environments that genuinely need to point somewhere custom.
+   */
+  const productionDomain =
+    process.env.VERCEL_ENV === "production" &&
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : undefined;
+
   const base =
+    productionDomain ??
     process.env.WHOOP_REDIRECT_BASE_URL ??
     (process.env.VERCEL_PROJECT_PRODUCTION_URL
       ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
@@ -86,6 +110,73 @@ export function whoopRedirectUri(): string {
     .replace(/\/api\/whoop\/callback$/, "");
 
   return `${origin}/api/whoop/callback`;
+}
+
+/**
+ * Just the origin half of the registered redirect URI.
+ *
+ * Exists so the connect route can compare where it is *running* against where
+ * WHOOP will *return the user*, and refuse the trip when they differ.
+ *
+ * That comparison is the difference between a legible error and a mystery.
+ * `whoop_oauth_state` and the session cookie are both scoped to the origin that
+ * set them, and no cookie attribute changes that — `SameSite`, `Secure` and
+ * `Partitioned` govern *when* a cookie is sent to its own origin, never which
+ * other origin may read it. So if the user starts the flow on the v0 preview
+ * while WHOOP is registered to return them to the deployed domain, the callback
+ * arrives at a host holding neither cookie and reports "the authorization state
+ * did not match" — which sounds like tampering and is really just a hostname.
+ */
+export function whoopRedirectOrigin(): string {
+  return whoopRedirectUri().replace(/\/api\/whoop\/callback$/, "");
+}
+
+/**
+ * Why a WHOOP connection started from `runningOrigin` cannot complete, or null
+ * if it can.
+ *
+ * Single owner for this judgement, deliberately. The connect route must refuse
+ * the redirect, and the connect page must not render an inviting button that
+ * leads only back to an error — same question, two callers. Two copies of a
+ * hostname comparison drift, and then the page offers a flow the route rejects.
+ *
+ * Returns prose for the person reading the page, not an error code.
+ */
+export function whoopOriginProblem(runningOrigin: string): string | null {
+  let registered: string;
+  try {
+    registered = whoopRedirectOrigin();
+  } catch {
+    // Missing credentials / unresolvable base URL is a different failure with
+    // its own reporting path. Not this function's claim to make.
+    return null;
+  }
+
+  if (sameOrigin(runningOrigin, registered)) return null;
+
+  return (
+    `WHOOP is registered to return you to ${registered}, but you are on ${runningOrigin}. ` +
+    `WHOOP only returns users to that one registered address, and your sign-in and ` +
+    `security cookies do not travel between different hostnames — so the connection would ` +
+    `fail on the way back. Open the app at ${registered} and connect there, or set ` +
+    `WHOOP_REDIRECT_BASE_URL to this origin and add it to the WHOOP app's redirect URIs.`
+  );
+}
+
+/**
+ * Scheme + host + port equality, tolerant of case and trailing slash.
+ *
+ * `URL.origin` is the right granularity: WHOOP matches `redirect_uri` exactly
+ * and cookies are port-scoped in practice here, so :3000 and :3001 must not
+ * compare equal.
+ */
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin.toLowerCase() === new URL(b).origin.toLowerCase();
+  } catch {
+    // An unparseable origin is not a match, and must never throw past a guard.
+    return false;
+  }
 }
 
 /**
@@ -386,6 +477,25 @@ export type WhoopCycle = {
   score?: { strain: number; kilojoule: number; average_heart_rate: number };
 };
 
+/**
+ * A recorded workout.
+ *
+ * `sport_name` is optional in practice: WHOOP returns an id for activities it
+ * has no name for, and older records predate the field. The planner therefore
+ * treats the type as genuinely nullable rather than defaulting it to
+ * "workout" — labelling an unknown activity is a small lie that ends up printed
+ * beside a meal time as though it were read from the device.
+ */
+export type WhoopWorkout = {
+  id: string;
+  start: string;
+  end: string;
+  timezone_offset: string;
+  sport_name?: string | null;
+  score_state: ScoreState;
+  score?: { strain: number; kilojoule: number };
+};
+
 type Paged<T> = { records: T[]; next_token?: string };
 
 /** `limit` is capped at 25 by the API; larger values are rejected. */
@@ -403,6 +513,13 @@ export async function fetchSleep(userId: string, limit = 7) {
 
 export async function fetchCycles(userId: string, limit = 7) {
   return whoopGet<Paged<WhoopCycle>>(userId, "/v2/cycle", {
+    limit: String(Math.min(limit, 25)),
+  });
+}
+
+/** Recorded workouts. The `read:workout` scope is already requested at connect. */
+export async function fetchWorkouts(userId: string, limit = 10) {
+  return whoopGet<Paged<WhoopWorkout>>(userId, "/v2/activity/workout", {
     limit: String(Math.min(limit, 25)),
   });
 }

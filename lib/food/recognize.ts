@@ -26,6 +26,16 @@ import { z } from "zod";
  * If paid credits are added, promote "google/gemini-3.6-flash" to the front:
  * it is the better estimator and the rest of this file needs no changes. The
  * fallback chain is what makes that safe to get wrong in either direction.
+ * That ID is confirmed present in the gateway's model list — do NOT reach for
+ * "google/gemini-3-pro", which does not exist and fails with "Model not found".
+ * Verify access before promoting: while the tier is free, a gated model at the
+ * front costs every request a guaranteed-failing round trip.
+ *
+ * One caveat this chain cannot fix: gateway rate limiting is account-wide, not
+ * per-model. Burning the primary and immediately calling the other two was
+ * measured failing all three, so the chain protects against a model being
+ * blocked or erroring, not against the limit that actually bites under
+ * concurrent use. That is a billing ceiling, not something to solve in code.
  */
 const MODELS = [
   "google/gemini-2.5-flash",

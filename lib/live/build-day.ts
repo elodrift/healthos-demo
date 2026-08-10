@@ -13,20 +13,33 @@
 
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { onboardingProfile, wearableConnection, wearableDaily } from "@/lib/db/schema";
 import {
+  mealLog,
+  onboardingProfile,
+  wearableConnection,
+  wearableDaily,
+} from "@/lib/db/schema";
+import {
+  fetchCycles,
   fetchRecovery,
   fetchSleep,
+  fetchWorkouts,
+  kjToKcal,
   sleepMinutes,
+  type WhoopCycle,
   type WhoopSleep,
+  type WhoopWorkout,
 } from "@/lib/whoop/client";
 import {
   proposeDay,
+  type ConsumedMeal,
   type ControlLevel,
   type DayProposal,
   type GoalMode,
+  type TrainingWindow,
   type WearableSignal,
 } from "@/lib/planner/propose-day";
+import { localDay } from "@/lib/live/local-day";
 
 export type LiveDayResult =
   | { status: "NO_WHOOP_APP"; }
@@ -39,6 +52,20 @@ export type LiveDayResult =
       /** True when WHOOP was unreachable and this came from the last stored day. */
       fromCache: boolean;
       cachedDay: string | null;
+      /**
+       * When the wearable data behind this plan was actually pulled from WHOOP.
+       *
+       * The UI needs this to say how old the advice is. A recovery score from
+       * 09:00 driving a plan being read at 22:00 is not wrong, but presenting it
+       * without its age invites the user to believe it is current.
+       */
+      syncedAt: Date | null;
+      /**
+       * True when this render reused stored data instead of calling WHOOP because
+       * the last sync was still inside the freshness window. Distinct from
+       * `fromCache`, which means WHOOP was *tried and failed*.
+       */
+      servedFromFreshStore: boolean;
     };
 
 /**
@@ -105,7 +132,144 @@ function toSignal(args: {
   return args;
 }
 
-export async function buildLiveDay(userId: string): Promise<LiveDayResult> {
+/**
+ * How long a WHOOP pull stays good enough to reuse.
+ *
+ * Recovery is scored once per night and strain accrues slowly, so re-fetching on
+ * every page view spends rate limit to redraw the same numbers. Fifteen minutes
+ * is short enough that a post-workout strain change surfaces quickly and long
+ * enough that opening the app three times in a row is one request.
+ */
+export const SYNC_TTL_MS = 15 * 60 * 1000;
+
+export function isFresh(lastSyncedAt: Date | null, now: Date): boolean {
+  if (!lastSyncedAt) return false;
+  return now.getTime() - lastSyncedAt.getTime() < SYNC_TTL_MS;
+}
+
+/**
+ * The cycle covering today, for strain.
+ *
+ * WHOOP's current cycle has `end: null`; completed ones are yesterday and
+ * earlier. Reading strain off the newest *completed* cycle would attribute
+ * yesterday's training to today, which is exactly the kind of confident-but-wrong
+ * input that makes an adaptive plan worse than a static one.
+ *
+ * Exported for testing.
+ */
+export function pickCurrentCycle(records: WhoopCycle[]): WhoopCycle | null {
+  const open = records.filter((c) => c.end === null);
+  if (open.length > 0) {
+    return open.reduce((latest, c) =>
+      Date.parse(c.start) > Date.parse(latest.start) ? c : latest,
+    );
+  }
+  return null;
+}
+
+/**
+ * Today's training window, from the user's recorded workouts.
+ *
+ * Only workouts that started on the given local day count. `training` was
+ * hardcoded to null before this, which meant the planner's pre- and
+ * post-training slots were unreachable code: the logic existed and could never
+ * fire. The type stays nullable because "no workout today" is a real answer.
+ *
+ * Exported for testing.
+ */
+export function pickTrainingWindow(
+  records: WhoopWorkout[],
+  day: string,
+): TrainingWindow {
+  const todays = records.filter((w) => {
+    const start = localTimeFromInstant(w.start, w.timezone_offset);
+    if (start === null) return false;
+    const offsetMin = parseOffsetMinutes(w.timezone_offset);
+    if (offsetMin === null) return false;
+    const shifted = new Date(Date.parse(w.start) + offsetMin * 60_000);
+    return shifted.toISOString().slice(0, 10) === day;
+  });
+
+  if (todays.length === 0) return null;
+
+  // The longest session is the one worth planning meals around; a 10-minute walk
+  // logged after a 90-minute lift should not become the anchor.
+  const main = todays.reduce((longest, w) => {
+    const len = Date.parse(w.end) - Date.parse(w.start);
+    const best = Date.parse(longest.end) - Date.parse(longest.start);
+    return len > best ? w : longest;
+  });
+
+  const start = localTimeFromInstant(main.start, main.timezone_offset);
+  const end = localTimeFromInstant(main.end, main.timezone_offset);
+  if (start === null || end === null) return null;
+
+  return { start, end, type: main.sport_name ?? null };
+}
+
+/** Today's logged meals, in the planner's shape. Always scoped to the user. */
+async function loadConsumed(userId: string, day: string): Promise<ConsumedMeal[]> {
+  const rows = await db
+    .select()
+    .from(mealLog)
+    .where(and(eq(mealLog.userId, userId), eq(mealLog.day, day)));
+
+  return rows.map((r) => ({
+    // `loggedAt` is when it was recorded, which is the best available stand-in
+    // for when it was eaten. It is not the same claim, so the planner treats a
+    // missing value as unknown rather than assuming a time.
+    atMinutes: r.loggedAt ? r.loggedAt.getHours() * 60 + r.loggedAt.getMinutes() : null,
+    proteinG: r.proteinG,
+    carbG: r.carbG,
+    kcal: r.kcal,
+    confidence: (r.confidence ?? "LOW") as "LOW" | "MEDIUM" | "HIGH",
+    estimated: r.estimated ?? true,
+  }));
+}
+
+/**
+ * Minutes since local midnight, in the user's own zone where we know it.
+ *
+ * Derived from WHOOP's reported offset rather than the server clock, for the same
+ * reason `localTimeFromInstant` exists: a server in UTC would place a London
+ * evening an hour earlier and quietly mark the last meal slot as still ahead.
+ */
+/**
+ * The calendar day `now` falls on, given a fixed UTC offset.
+ *
+ * `localDay` needs an IANA zone name, which WHOOP does not send — it sends the
+ * offset that was in force. This is the offset-shaped equivalent, and it is what
+ * decides which day's meals get subtracted from which day's plan.
+ *
+ * Exported for testing.
+ */
+export function localDayFromOffset(
+  now: Date,
+  offset: string | null | undefined,
+): string | null {
+  const offsetMin = parseOffsetMinutes(offset);
+  if (offsetMin === null) return null;
+  return new Date(now.getTime() + offsetMin * 60_000).toISOString().slice(0, 10);
+}
+
+function nowMinutesIn(offset: string | null | undefined, now: Date): number | null {
+  const offsetMin = parseOffsetMinutes(offset);
+  if (offsetMin === null) return null;
+  const shifted = new Date(now.getTime() + offsetMin * 60_000);
+  return shifted.getUTCHours() * 60 + shifted.getUTCMinutes();
+}
+
+export async function buildLiveDay(
+  userId: string,
+  options?: {
+    /** Skip the freshness window and pull from WHOOP now. Set by manual refresh. */
+    force?: boolean;
+    /** Injectable clock, so the freshness window is testable. */
+    now?: Date;
+  },
+): Promise<LiveDayResult> {
+  const now = options?.now ?? new Date();
+  const force = options?.force ?? false;
   if (!process.env.WHOOP_CLIENT_ID || !process.env.WHOOP_CLIENT_SECRET) {
     return { status: "NO_WHOOP_APP" };
   }
@@ -143,14 +307,82 @@ export async function buildLiveDay(userId: string): Promise<LiveDayResult> {
     goalMode: (profileRow.goalMode ?? null) as GoalMode | null,
   };
 
+  /*
+   * Reuse a recent pull rather than calling WHOOP on every render.
+   *
+   * Only today's stored row qualifies: yesterday's numbers inside the freshness
+   * window would be fresh by the clock and wrong by a day. A manual refresh
+   * bypasses this entirely, which is what makes "check again after training" an
+   * action the user can actually take rather than a wait.
+   */
+  if (!force && isFresh(conn.lastSyncedAt, now)) {
+    const storedDay = localDay(now, "UTC") ?? new Date().toISOString().slice(0, 10);
+    const [todayRow] = await db
+      .select()
+      .from(wearableDaily)
+      .where(
+        and(
+          eq(wearableDaily.userId, userId),
+          eq(wearableDaily.provider, "whoop"),
+          eq(wearableDaily.day, storedDay),
+        ),
+      )
+      .limit(1);
+
+    if (todayRow) {
+      const signal = toSignal({
+        recoveryScore: todayRow.recoveryScore,
+        wakeTime: todayRow.sleepEnd
+          ? localTimeFromInstant(todayRow.sleepEnd.toISOString(), "Z")
+          : null,
+        sleepDurationMin: todayRow.sleepDurationMin,
+        sleepPerformance: todayRow.sleepPerformance,
+        strain: todayRow.strain,
+      });
+
+      return {
+        status: "OK",
+        proposal: proposeDay({
+          signal,
+          profile: plannerProfile,
+          training: null,
+          consumed: await loadConsumed(userId, storedDay),
+          nowMinutes: nowMinutesIn("Z", now),
+        }),
+        fromCache: false,
+        cachedDay: null,
+        syncedAt: conn.lastSyncedAt,
+        servedFromFreshStore: true,
+      };
+    }
+  }
+
   try {
-    const [recovery, sleep] = await Promise.all([
+    const [recovery, sleep, cycles, workouts] = await Promise.all([
       fetchRecovery(userId, 1),
       fetchSleep(userId, 5),
+      fetchCycles(userId, 3),
+      fetchWorkouts(userId, 10),
     ]);
 
     const latestRecovery = recovery.records[0];
     const mainSleep = pickMainSleep(sleep.records);
+    const cycle = pickCurrentCycle(cycles.records);
+
+    /*
+     * Strain only counts once WHOOP has scored the cycle. An unscored cycle
+     * carries no strain figure, and treating its absence as zero would tell the
+     * planner the user had an unusually easy day — moving carbs down on no
+     * evidence at all.
+     */
+    const strain =
+      cycle?.score_state === "SCORED" ? (cycle.score?.strain ?? null) : null;
+
+    const offset = mainSleep?.timezone_offset ?? null;
+    const day =
+      (offset ? localDayFromOffset(now, offset) : null) ??
+      localDay(now, "UTC") ??
+      new Date().toISOString().slice(0, 10);
 
     const signal = toSignal({
       recoveryScore:
@@ -163,16 +395,58 @@ export async function buildLiveDay(userId: string): Promise<LiveDayResult> {
         mainSleep?.score_state === "SCORED"
           ? (mainSleep.score?.sleep_performance_percentage ?? null)
           : null,
-      strain: null,
+      strain,
     });
 
-    await persistDaily(userId, signal, mainSleep);
+    const training = pickTrainingWindow(workouts.records, day);
+    // Rounded because `kcalBurned` is an integer column: `kjToKcal` returns a
+    // float, and Postgres rejects it outright rather than truncating.
+    const kcalBurned =
+      cycle?.score_state === "SCORED" && cycle.score?.kilojoule !== undefined
+        ? Math.round(kjToKcal(cycle.score.kilojoule))
+        : null;
+
+    /*
+     * Caching the reading is a side effect, not part of producing the plan.
+     *
+     * It used to sit inside the same `try` as the WHOOP calls, so a failed local
+     * write fell into the outage handler and the user was shown a stale cached
+     * plan captioned "WHOOP unreachable" — a false statement about a third party
+     * caused entirely by our own bug. A real instance of this (a float into an
+     * integer column) is what surfaced it. The live plan below is already
+     * computed and correct; a cache miss must not downgrade or misattribute it.
+     */
+    try {
+      await persistDaily(userId, signal, mainSleep, kcalBurned, day);
+      await db
+        .update(wearableConnection)
+        .set({ lastSyncedAt: now, syncError: null, updatedAt: now })
+        .where(
+          and(
+            eq(wearableConnection.userId, userId),
+            eq(wearableConnection.provider, "whoop"),
+          ),
+        );
+    } catch (persistError) {
+      // Logged rather than surfaced: the plan the user sees is live and accurate.
+      // The only user-visible consequence is that the freshness window cannot be
+      // honoured, so the next render re-fetches — which is the safe direction.
+      console.error("[live] failed to cache WHOOP reading:", persistError);
+    }
 
     return {
       status: "OK",
-      proposal: proposeDay({ signal, profile: plannerProfile, training: null }),
+      proposal: proposeDay({
+        signal,
+        profile: plannerProfile,
+        training,
+        consumed: await loadConsumed(userId, day),
+        nowMinutes: nowMinutesIn(offset ?? "Z", now),
+      }),
       fromCache: false,
       cachedDay: null,
+      syncedAt: now,
+      servedFromFreshStore: false,
     };
   } catch (error) {
     // WHOOP being down must not blank the day. Fall back to the last stored
@@ -199,11 +473,26 @@ export async function buildLiveDay(userId: string): Promise<LiveDayResult> {
       strain: cached.strain,
     });
 
+    /*
+     * Meals are read from the local database, so a WHOOP outage does not stop the
+     * plan adapting to what was eaten. Only the wearable half is stale, and the
+     * subtraction stays correct — but it is scoped to `cached.day`, not today, so
+     * a plan built from Tuesday's recovery is not silently credited with
+     * Wednesday's meals.
+     */
     return {
       status: "OK",
-      proposal: proposeDay({ signal, profile: plannerProfile, training: null }),
+      proposal: proposeDay({
+        signal,
+        profile: plannerProfile,
+        training: null,
+        consumed: await loadConsumed(userId, cached.day),
+        nowMinutes: nowMinutesIn("Z", now),
+      }),
       fromCache: true,
       cachedDay: cached.day,
+      syncedAt: cached.fetchedAt ?? null,
+      servedFromFreshStore: false,
     };
   }
 }
@@ -213,8 +502,15 @@ async function persistDaily(
   userId: string,
   signal: WearableSignal,
   mainSleep: WhoopSleep | null,
+  kcalBurned: number | null,
+  /**
+   * The user's local day. Passed in rather than recomputed from the server clock:
+   * this row is keyed on the day, so deriving it in UTC here while the planner
+   * derived it from the WHOOP offset above would write today's strain onto
+   * yesterday's row for anyone west of Greenwich in the evening.
+   */
+  day: string,
 ) {
-  const day = new Date().toISOString().slice(0, 10);
   await db
     .insert(wearableDaily)
     .values({
@@ -222,6 +518,10 @@ async function persistDaily(
       provider: "whoop",
       day,
       recoveryScore: signal.recoveryScore,
+      // Strain was missing from this write entirely, which made it unreadable on
+      // any later render even though it had been fetched.
+      strain: signal.strain,
+      kcalBurned,
       sleepDurationMin: signal.sleepDurationMin,
       sleepPerformance: signal.sleepPerformance,
       sleepStart: mainSleep ? new Date(mainSleep.start) : null,
@@ -231,8 +531,12 @@ async function persistDaily(
       target: [wearableDaily.userId, wearableDaily.provider, wearableDaily.day],
       set: {
         recoveryScore: signal.recoveryScore,
+        strain: signal.strain,
+        kcalBurned,
         sleepDurationMin: signal.sleepDurationMin,
         sleepPerformance: signal.sleepPerformance,
+        sleepStart: mainSleep ? new Date(mainSleep.start) : null,
+        sleepEnd: mainSleep ? new Date(mainSleep.end) : null,
         fetchedAt: new Date(),
       },
     });

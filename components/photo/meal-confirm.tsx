@@ -45,13 +45,74 @@ function draftFrom(recognition: RecognitionResult): Draft {
   };
 }
 
+/**
+ * What to say about the meal's timestamp.
+ *
+ * Mirrors the server's rules in app/api/meals/route.ts deliberately: if the two
+ * disagree the UI would describe a decision the database did not make. The
+ * server remains the authority — this only predicts, and every branch names the
+ * clock it is describing rather than stating a bare time.
+ */
+function describeTime(capturedAt: string | null | undefined): { text: string } {
+  const now = new Date();
+  const fallback = {
+    text: `Will be logged at ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — this photo carried no capture time, so that is when you uploaded it, not necessarily when you ate.`,
+  };
+
+  if (!capturedAt) return fallback;
+
+  // Read the naive wall clock in the browser's own zone, which is the same
+  // assumption the server makes.
+  const m = capturedAt.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!m) return fallback;
+  const shot = new Date(
+    Number(m[1]),
+    Number(m[2]) - 1,
+    Number(m[3]),
+    Number(m[4]),
+    Number(m[5]),
+  );
+
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  if (shot.getTime() > now.getTime() || now.getTime() - shot.getTime() > THIRTY_DAYS_MS) {
+    // Same rejection the server applies, so the copy cannot promise a time the
+    // insert will not use.
+    return {
+      text: `Will be logged at ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} — the photo says it was taken ${shot.toLocaleDateString()}, which is too far off to trust, so upload time is used instead.`,
+    };
+  }
+
+  const clock = shot.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const sameDay = shot.toDateString() === now.toDateString();
+
+  if (sameDay) {
+    return { text: `Taken at ${clock}, from the photo. That is when this meal will be logged.` };
+  }
+
+  // A backdated meal will not appear in "today", so say so outright rather than
+  // let it save and seem to vanish.
+  return {
+    text: `Taken ${shot.toLocaleDateString()} at ${clock}, from the photo — so it will be logged on that day, not today.`,
+  };
+}
+
 export function MealConfirm({
   recognition,
   photoPathname,
+  capturedAt,
   onLogged,
 }: {
   recognition: RecognitionResult;
   photoPathname?: string;
+  /**
+   * The photo's EXIF capture time as a naive wall clock ("YYYY-MM-DDTHH:MM"),
+   * or null when the photo carried none.
+   *
+   * Passed in rather than derived, so this component never asserts a meal time
+   * it was not given — the recurring bug in this codebase is a component
+   * stating a fact it does not actually receive.
+   */
+  capturedAt?: string | null;
   onLogged: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(() => draftFrom(recognition));
@@ -59,6 +120,10 @@ export function MealConfirm({
   const [error, setError] = useState<string | null>(null);
 
   const recognized = recognition.kind === "recognized" ? recognition : null;
+
+  // Computed once per render rather than memoised: it reads the wall clock, and
+  // a stale cached "will be logged at 14:02" would be its own small lie.
+  const timeNote = describeTime(capturedAt);
 
   // A meal with no name and no calories is not a meal. Everything else is the
   // user's call — including a deliberate zero.
@@ -84,6 +149,12 @@ export function MealConfirm({
           source: photoPathname ? "photo" : "manual",
           photoPathname,
           timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          /*
+            Sent so the meal is filed at the time it was eaten rather than the
+            time it was uploaded. The server still validates it and falls back
+            to now if it is in the future or very old.
+          */
+          capturedAt: capturedAt ?? undefined,
         }),
       });
       if (!res.ok) {
@@ -127,6 +198,19 @@ export function MealConfirm({
               : "The estimator is unavailable right now, so nothing was guessed. Your photo is saved — fill in what you know."}
         </p>
       )}
+
+      {/*
+        When the meal is being filed, and on whose authority.
+
+        This exists because the previous behaviour was wrong and invisible: the
+        meal took the *upload* time, so reviewing brunch photos at night logged
+        everything at midnight with nothing on screen to reveal it. A time this
+        app acts on has to be stated, and its source named, exactly like the
+        MEASURED/ASSUMED distinction on planner decisions.
+      */}
+      <p className="mt-2 font-mono text-[11px] leading-relaxed text-ink-lo">
+        {timeNote.text}
+      </p>
 
       <label className="mt-3 block">
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">Meal</span>

@@ -29,15 +29,7 @@ const CONTROL_COPY: Record<string, string> = {
   UNKNOWN: "Control over food not set",
 };
 
-export function DayProposalView({
-  proposal,
-  fromCache,
-  cachedDay,
-}: {
-  proposal: DayProposal;
-  fromCache: boolean;
-  cachedDay: string | null;
-}) {
+export function DayProposalView({ proposal }: { proposal: DayProposal }) {
   const evidence = EVIDENCE_COPY[proposal.evidence];
 
   return (
@@ -59,12 +51,72 @@ export function DayProposalView({
 
       <p className="text-[13px] leading-relaxed text-ink-lo">{evidence.detail}</p>
 
-      {fromCache ? (
-        <p className="rounded-xl border border-dashed border-base-700 p-3 text-[13px] leading-relaxed text-ink-lo">
-          WHOOP could not be reached, so this uses your reading from{" "}
-          <span className="font-mono text-ink-hi">{cachedDay}</span>. It is real data, just
-          not today&apos;s.
-        </p>
+      {/*
+        The outage notice used to live here and said "It is real data, just not
+        today's" — a claim this component cannot support, since it has `cachedDay`
+        but no notion of the user's local today, so it asserted the reading came
+        from another day even when it came from today. Rather than restate it
+        accurately in two places, the single source of truth is now `SyncStatus`,
+        which owns the sync age and can say "could not be reached" together with
+        how old the stored reading actually is. Two separate outage banners within
+        a few lines read as two separate problems.
+      */}
+
+      {/*
+        What logged intake did to the rest of the day.
+        Sits above the rail because it is the reason the rail's numbers differ
+        from the ones the user saw this morning; showing the changed plan first
+        and explaining it afterwards reads as though the plan simply drifted.
+      */}
+      {proposal.replanNotes.length > 0 ? (
+        <section className="rounded-xl border border-accent-green/30 bg-accent-green/5 p-4">
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.12em] text-accent-green">
+            Replanned since this morning
+          </h2>
+          <ul className="mt-2.5 flex flex-col gap-2">
+            {proposal.replanNotes.map((line) => (
+              <li key={line} className="text-[13px] leading-relaxed text-ink-mid">
+                {line}
+              </li>
+            ))}
+          </ul>
+          {proposal.remaining ? (
+            <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 border-t border-base-700 pt-3">
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">
+                  Eaten
+                </dt>
+                <dd className="mt-0.5 font-mono text-[15px] text-ink-hi">
+                  {proposal.remaining.consumed.proteinG}g
+                </dd>
+              </div>
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">
+                  Left
+                </dt>
+                <dd className="mt-0.5 font-mono text-[15px] text-ink-hi">
+                  {proposal.remaining.proteinG === null
+                    ? "—"
+                    : `${proposal.remaining.proteinG}g`}
+                </dd>
+              </div>
+              {/*
+                Estimate provenance travels with the figures, always visible.
+                A badge that appeared only when confidence was low would make its
+                absence ambiguous — the reader could not tell "confirmed" from
+                "not yet labelled".
+              */}
+              <div>
+                <dt className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">
+                  Basis
+                </dt>
+                <dd className="mt-0.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-mid">
+                  {proposal.remaining.allLowConfidence ? "Est. · low" : "Est."}
+                </dd>
+              </div>
+            </dl>
+          ) : null}
+        </section>
       ) : null}
 
       {/* The day skeleton: the frame every meal time is derived from. */}
@@ -88,7 +140,16 @@ export function DayProposalView({
         {proposal.slots.map((slot, i) => (
           <li key={slot.sortOrder} className="flex gap-3">
             <div className="flex flex-col items-center">
-              <span className="font-mono text-[11px] leading-6 text-accent-green">
+              {/*
+                A passed slot is dimmed rather than hidden. It still explains the
+                shape of the day, and removing it would make the rail contradict
+                the plan the user was given at breakfast.
+              */}
+              <span
+                className={`font-mono text-[11px] leading-6 ${
+                  slot.isPast === true ? "text-ink-lo" : "text-accent-green"
+                }`}
+              >
                 {slot.slotTime}
               </span>
               {i < proposal.slots.length - 1 ? (
@@ -126,6 +187,24 @@ export function DayProposalView({
                   ]
                     .filter(Boolean)
                     .join(" · ")}
+                </p>
+              ) : null}
+
+              {/*
+                The delta is stated against the morning's figure rather than
+                replacing it silently. "38g" tells the user what to eat; "+12g vs
+                this morning's 26g" tells them the system reacted and why the
+                number moved, which is the whole promise of an adaptive plan.
+              */}
+              {slot.adjustmentNote ? (
+                <p className="mt-1.5 font-mono text-[11px] text-accent-green">
+                  {slot.adjustmentNote}
+                </p>
+              ) : null}
+
+              {slot.isPast === true ? (
+                <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo">
+                  Time passed
                 </p>
               ) : null}
             </div>

@@ -5,7 +5,9 @@ import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { buildLiveDay } from "@/lib/live/build-day";
 import { DayProposalView } from "@/components/live/day-proposal";
+import { DecisionTrace } from "@/components/live/decision-trace";
 import { LoggedAgainstTarget } from "@/components/live/logged-against-target";
+import { SyncStatus } from "@/components/live/sync-status";
 
 export const metadata: Metadata = {
   title: "Live mode — HealthOS",
@@ -39,12 +41,26 @@ export default async function LivePage() {
           </span>
           <span className="text-[15px] font-semibold tracking-tight">HealthOS</span>
         </Link>
-        <Link
-          href="/onboarding"
-          className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4"
-        >
-          Setup
-        </Link>
+        <nav className="flex items-center gap-4">
+          <Link
+            href="/chat"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
+          >
+            Chat
+          </Link>
+          <Link
+            href="/community"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
+          >
+            Community
+          </Link>
+          <Link
+            href="/onboarding"
+            className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-lo underline underline-offset-4 transition hover:text-accent-green"
+          >
+            Setup
+          </Link>
+        </nav>
       </header>
 
       <div>
@@ -66,17 +82,31 @@ export default async function LivePage() {
             what they do about the answer.
           */}
           <LoggedAgainstTarget dayTarget={result.proposal.dayTarget} />
+          {/*
+            Data age sits between the totals and the plan: it qualifies both, and
+            burying it at the bottom would put the caveat after every decision it
+            is meant to inform.
+          */}
+          <SyncStatus
+            syncedAt={result.syncedAt ? result.syncedAt.toISOString() : null}
+            servedFromFreshStore={result.servedFromFreshStore}
+            // `fromCache` means the WHOOP fetch failed and we fell back to a
+            // stored row, so it is exactly the inverse of "we reached WHOOP".
+            reachedProvider={!result.fromCache}
+          />
           <Link
             href="/log"
             className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-base-700 bg-base-900 px-4 text-[14px] font-semibold text-ink-hi"
           >
             Log a meal
           </Link>
-          <DayProposalView
-            proposal={result.proposal}
-            fromCache={result.fromCache}
-            cachedDay={result.cachedDay}
-          />
+          <DayProposalView proposal={result.proposal} />
+          {/*
+            Placed after the plan, not before it. The trace explains a schedule
+            the reader has already seen; leading with the reasoning would ask them
+            to follow an argument about something they cannot yet picture.
+          */}
+          <DecisionTrace trace={result.proposal.trace} />
         </>
       ) : (
         <BlockedState result={result} />

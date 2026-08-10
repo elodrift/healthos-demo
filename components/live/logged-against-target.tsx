@@ -6,8 +6,11 @@
  * This is the one place in the app where an estimate meets a target, so it is
  * the easiest place to accidentally lie. Three rules hold it honest:
  *
- *  1. The bar compares a *sum of estimates* to a target and says so. It is not
- *     a measurement of intake and must never be captioned as one.
+ *  1. The bar compares logged rows to a target and captions itself with what
+ *     those rows actually are. Estimates must never be captioned as measured
+ *     intake — but since the barcode flow, a weighed label reading must not be
+ *     captioned as an estimate either. Read `estimated` per row; never infer it
+ *     from `source`, because a scan with a guessed portion is still an estimate.
  *  2. A floor and a target are different promises (§4.11). Clearing a 110g floor
  *     is a success; missing a 160g target is not. `proteinKind` decides the verb.
  *  3. Over the number reads neutral, never red. Being over on protein is
@@ -23,6 +26,15 @@ interface Meal {
   proteinG: number | null;
   kcal: number | null;
   confidence: string;
+  /**
+   * False only for a scanned label with a weighed portion.
+   *
+   * This field was missing here while the caption below hardcoded the word
+   * "estimates", so the moment the barcode flow shipped this section called a
+   * weighed reading an estimate — a claim it had no data to make. Same shape as
+   * the SyncStatus bug: a component asserting something it never received.
+   */
+  estimated: boolean;
 }
 
 const fetcher = async (url: string) => {
@@ -152,11 +164,29 @@ export function LoggedAgainstTarget({ dayTarget }: { dayTarget: DayTarget }) {
       <p className="mt-2 text-[12px] leading-relaxed text-ink-lo">
         {data.meals.length === 0
           ? "Nothing logged yet today."
-          : `Added from ${data.meals.length} ${
-              data.meals.length === 1 ? "estimate" : "estimates"
-            }, not measured intake.${
-              anyLowConfidence ? " One or more was low confidence." : ""
-            }`}
+          : (() => {
+              /*
+                The caption has to describe the rows that are actually there.
+                Before the barcode flow every row was an estimate and the flat
+                "not measured intake" was true; a weighed label reading makes it
+                false, and understating the data is the same failure as
+                overstating it.
+
+                `=== false` rather than a falsy test: rows predating the column
+                come back undefined and must not be counted as measured.
+              */
+              const measured = data.meals.filter((m) => m.estimated === false).length;
+              const n = data.meals.length;
+              const lowNote = anyLowConfidence ? " One or more was low confidence." : "";
+
+              if (measured === 0) {
+                return `Added from ${n} ${n === 1 ? "estimate" : "estimates"}, not measured intake.${lowNote}`;
+              }
+              if (measured === n) {
+                return `Added from ${n} weighed label ${n === 1 ? "reading" : "readings"}, so this is measured intake.${lowNote}`;
+              }
+              return `Added from ${n} rows: ${measured} weighed, ${n - measured} estimated. Only as firm as the weakest one.${lowNote}`;
+            })()}
       </p>
     </section>
   );

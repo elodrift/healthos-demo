@@ -6,6 +6,8 @@ import type { Metadata } from "next";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { wearableConnection } from "@/lib/db/schema";
+import { whoopOriginProblem } from "@/lib/whoop/client";
+import { ConnectWhoopButton } from "@/components/whoop/connect-button";
 import { DisconnectWhoopButton } from "@/components/whoop/disconnect-button";
 
 export const metadata: Metadata = {
@@ -22,7 +24,13 @@ export default async function ConnectWhoopPage({
 }) {
   // Next 14.2: headers() is synchronous.
   const session = await auth.api.getSession({ headers: headers() });
-  if (!session?.user) redirect("/sign-in");
+  // Carry the destination. Without `?next=` the sign-in form sends everyone to
+  // /onboarding, so someone who set out to connect WHOOP signs in and silently
+  // lands somewhere else — then reasonably reports "WHOOP doesn't connect".
+  // The server log for exactly that: GET /connect/whoop 307, then no further
+  // trace of the intent. The form has honoured `?next=` since the session
+  // verification fix; this page just was not telling it where to go.
+  if (!session?.user) redirect("/sign-in?next=/connect/whoop");
 
   const rows = await db
     .select()
@@ -38,6 +46,24 @@ export default async function ConnectWhoopPage({
   const conn = rows[0];
   const credentialsMissing =
     !process.env.WHOOP_CLIENT_ID || !process.env.WHOOP_CLIENT_SECRET;
+
+  /*
+    Ask the same question the connect route asks, from the same function.
+
+    Without this the page rendered a fully enabled green "Connect WHOOP" button
+    on an origin where the route can only bounce it straight back to an error —
+    an invitation that cannot be accepted. Checking here means the reason is
+    stated before the click, not after.
+  */
+  const h = headers();
+  const runningOrigin = `${h.get("x-forwarded-proto") ?? "https"}://${
+    h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000"
+  }`;
+  const originProblem = whoopOriginProblem(runningOrigin);
+
+  // Anything that makes the flow impossible disables the button. Kept as one
+  // boolean so the button and the footer copy below cannot disagree.
+  const cannotConnect = credentialsMissing || originProblem !== null;
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col px-5 py-10">
@@ -119,6 +145,24 @@ export default async function ConnectWhoopPage({
         ) : null}
       </section>
 
+      {/*
+        Shown when the *current* origin cannot complete the flow.
+
+        Rendered even without ?error=, because the user has not clicked anything
+        yet — the whole point is to say so before they do. `searchParams.error`
+        above covers the post-click case; this covers arriving on the page.
+      */}
+      {originProblem && !searchParams.error ? (
+        <section className="mt-4 rounded-xl border border-base-700 bg-base-900 p-4">
+          <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">
+            Wrong address for this connection
+          </h2>
+          <p className="mt-2 text-[13px] leading-relaxed text-ink-mid">
+            {originProblem}
+          </p>
+        </section>
+      ) : null}
+
       {credentialsMissing ? (
         <section className="mt-4 rounded-xl border border-base-700 bg-base-900 p-4">
           <h2 className="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-lo">
@@ -150,18 +194,13 @@ export default async function ConnectWhoopPage({
         </section>
       ) : null}
 
-      <a
-        href={credentialsMissing ? undefined : "/api/whoop/connect"}
-        aria-disabled={credentialsMissing}
-        className={
-          "mt-5 flex min-h-[44px] w-full items-center justify-center rounded-lg px-4 text-[15px] font-semibold transition-opacity " +
-          (credentialsMissing
-            ? "pointer-events-none bg-base-700 text-ink-lo"
-            : "bg-accent-green text-base-950")
-        }
-      >
-        {conn ? "Reconnect WHOOP" : "Connect WHOOP"}
-      </a>
+      {/*
+        A client component, because WHOOP's login sends
+        `x-frame-options: SAMEORIGIN` and so cannot render inside the preview
+        iframe — the flow has to be opened in a top-level tab when we are framed,
+        which is only knowable in the browser.
+      */}
+      <ConnectWhoopButton connected={Boolean(conn)} disabled={cannotConnect} />
 
       {/*
         Rendered unconditionally, with `connected` passed in, rather than wrapped
@@ -176,8 +215,15 @@ export default async function ConnectWhoopPage({
       */}
       <DisconnectWhoopButton connected={Boolean(conn)} />
 
+      {/*
+        "You'll be taken to WHOOP" is a promise, so it is only made when the
+        button can actually keep it. With the flow blocked it stated the exact
+        thing that was failing, directly under a dead button — the same class of
+        bug as the old refresh button saying it "pulled fresh data" when nothing
+        was pulled. The privacy link is unconditional; only the claim is gated.
+      */}
       <p className="mt-3 text-center text-[12px] leading-relaxed text-ink-lo">
-        You&apos;ll be taken to WHOOP to approve access.{" "}
+        {cannotConnect ? null : <>You&apos;ll be taken to WHOOP to approve access. </>}
         <Link
           href="/privacy"
           className="underline decoration-ink-lo/40 underline-offset-2"
