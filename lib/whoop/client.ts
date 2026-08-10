@@ -113,6 +113,25 @@ export function whoopRedirectUri(): string {
 }
 
 /**
+ * Just the origin half of the registered redirect URI.
+ *
+ * Exists so the connect route can compare where it is *running* against where
+ * WHOOP will *return the user*, and refuse the trip when they differ.
+ *
+ * That comparison is the difference between a legible error and a mystery.
+ * `whoop_oauth_state` and the session cookie are both scoped to the origin that
+ * set them, and no cookie attribute changes that — `SameSite`, `Secure` and
+ * `Partitioned` govern *when* a cookie is sent to its own origin, never which
+ * other origin may read it. So if the user starts the flow on the v0 preview
+ * while WHOOP is registered to return them to the deployed domain, the callback
+ * arrives at a host holding neither cookie and reports "the authorization state
+ * did not match" — which sounds like tampering and is really just a hostname.
+ */
+export function whoopRedirectOrigin(): string {
+  return whoopRedirectUri().replace(/\/api\/whoop\/callback$/, "");
+}
+
+/**
  * Build the consent URL.
  *
  * WHOOP requires `state` to be at least 8 characters and echoes it back; we
