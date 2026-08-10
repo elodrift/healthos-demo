@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LogPage() {
   const session = await auth.api.getSession({ headers: headers() });
-  if (!session?.user) redirect("/sign-in");
+  if (!session?.user) redirect("/sign-in?next=/log");
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col gap-4 px-4 py-6">

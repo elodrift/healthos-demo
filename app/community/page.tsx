@@ -26,7 +26,7 @@ export const metadata = {
  */
 export default async function CommunityPage() {
   const session = await auth.api.getSession({ headers: headers() });
-  if (!session?.user) redirect("/sign-in");
+  if (!session?.user) redirect("/sign-in?next=/community");
 
   const [own, friendCheckIns, friends] = await Promise.all([
     getOwnCheckIns(),

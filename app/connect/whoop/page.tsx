@@ -24,7 +24,13 @@ export default async function ConnectWhoopPage({
 }) {
   // Next 14.2: headers() is synchronous.
   const session = await auth.api.getSession({ headers: headers() });
-  if (!session?.user) redirect("/sign-in");
+  // Carry the destination. Without `?next=` the sign-in form sends everyone to
+  // /onboarding, so someone who set out to connect WHOOP signs in and silently
+  // lands somewhere else — then reasonably reports "WHOOP doesn't connect".
+  // The server log for exactly that: GET /connect/whoop 307, then no further
+  // trace of the intent. The form has honoured `?next=` since the session
+  // verification fix; this page just was not telling it where to go.
+  if (!session?.user) redirect("/sign-in?next=/connect/whoop");
 
   const rows = await db
     .select()
