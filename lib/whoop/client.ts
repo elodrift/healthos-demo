@@ -132,6 +132,54 @@ export function whoopRedirectOrigin(): string {
 }
 
 /**
+ * Why a WHOOP connection started from `runningOrigin` cannot complete, or null
+ * if it can.
+ *
+ * Single owner for this judgement, deliberately. The connect route must refuse
+ * the redirect, and the connect page must not render an inviting button that
+ * leads only back to an error — same question, two callers. Two copies of a
+ * hostname comparison drift, and then the page offers a flow the route rejects.
+ *
+ * Returns prose for the person reading the page, not an error code.
+ */
+export function whoopOriginProblem(runningOrigin: string): string | null {
+  let registered: string;
+  try {
+    registered = whoopRedirectOrigin();
+  } catch {
+    // Missing credentials / unresolvable base URL is a different failure with
+    // its own reporting path. Not this function's claim to make.
+    return null;
+  }
+
+  if (sameOrigin(runningOrigin, registered)) return null;
+
+  return (
+    `WHOOP is registered to return you to ${registered}, but you are on ${runningOrigin}. ` +
+    `WHOOP only returns users to that one registered address, and your sign-in and ` +
+    `security cookies do not travel between different hostnames — so the connection would ` +
+    `fail on the way back. Open the app at ${registered} and connect there, or set ` +
+    `WHOOP_REDIRECT_BASE_URL to this origin and add it to the WHOOP app's redirect URIs.`
+  );
+}
+
+/**
+ * Scheme + host + port equality, tolerant of case and trailing slash.
+ *
+ * `URL.origin` is the right granularity: WHOOP matches `redirect_uri` exactly
+ * and cookies are port-scoped in practice here, so :3000 and :3001 must not
+ * compare equal.
+ */
+function sameOrigin(a: string, b: string): boolean {
+  try {
+    return new URL(a).origin.toLowerCase() === new URL(b).origin.toLowerCase();
+  } catch {
+    // An unparseable origin is not a match, and must never throw past a guard.
+    return false;
+  }
+}
+
+/**
  * Build the consent URL.
  *
  * WHOOP requires `state` to be at least 8 characters and echoes it back; we

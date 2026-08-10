@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { WhoopAuthError, whoopAuthorizeUrl } from "@/lib/whoop/client";
+import { WhoopAuthError, whoopAuthorizeUrl, whoopOriginProblem } from "@/lib/whoop/client";
 import { WHOOP_STATE_COOKIE } from "@/lib/whoop/oauth-state";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +20,31 @@ export async function GET() {
   const session = await auth.api.getSession({ headers: headers() });
   if (!session?.user) {
     return NextResponse.redirect(new URL("/sign-in", getOrigin()));
+  }
+
+  /*
+    Refuse the round trip when this origin cannot receive the callback.
+
+    WHOOP returns the user to the ONE redirect_uri registered on the app
+    (WHOOP_REDIRECT_BASE_URL). If they started here on a different host — the v0
+    preview, a branch deployment, localhost — the callback lands on the
+    registered host instead, which holds neither `whoop_oauth_state` nor their
+    session cookie. The callback then correctly reports "the authorization state
+    did not match", which reads as tampering when it is really just a hostname.
+
+    No cookie attribute can fix this: SameSite/Secure/Partitioned govern *when* a
+    cookie is sent back to its own origin, never which other origin may read it.
+    So this is a genuine precondition, and failing here — before the user hands
+    credentials to WHOOP and comes back to a dead end — is the honest place to
+    stop. Checked at request time rather than trusted, because the deployed host
+    and the registered host drift apart routinely.
+  */
+  const runningOrigin = getOrigin();
+  const originProblem = whoopOriginProblem(runningOrigin);
+  if (originProblem) {
+    return NextResponse.redirect(
+      new URL(`/connect/whoop?error=${encodeURIComponent(originProblem)}`, runningOrigin),
+    );
   }
 
   let authorizeUrl: string;
