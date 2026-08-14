@@ -132,7 +132,21 @@ export function OccasionCard({ occasion }: { occasion: Occasion }) {
                 >
                   {chosen ? (
                     <>
-                      <span aria-hidden="true">✓</span> Chosen
+                      {/* An SVG, not a "✓" character: the monospace stack has no
+                          glyph for it and rendered a tofu box in the browser. */}
+                      <svg
+                        aria-hidden="true"
+                        viewBox="0 0 12 12"
+                        className="h-2.5 w-2.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M2.5 6.5 L4.8 8.8 L9.5 3.5" />
+                      </svg>
+                      Chosen
                     </>
                   ) : (
                     "I'll have this"
