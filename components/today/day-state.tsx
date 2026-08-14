@@ -27,6 +27,20 @@ function pct(n: number, of: number) {
   return Math.max(0, Math.min(100, (n / of) * 100));
 }
 
+/**
+ * The estimated segment is a diagonal hatch, not a faded copy of the solid one.
+ *
+ * The first version separated "logged" from "estimated" by opacity alone
+ * (`bg-ink-lo` against `bg-ink-lo/35`) and at 390px on a 6px bar the two
+ * collapsed into a single slightly-uneven stripe — the encoding was there in the
+ * markup and absent to the eye. Hatch survives at small sizes because it differs
+ * in *kind* rather than degree, so it cannot merge into its neighbour however
+ * close the values sit. Literal rgba here on purpose: this project is Tailwind v3,
+ * where `var(--color-*)` in an inline style silently renders nothing.
+ */
+const HATCH_INK = `repeating-linear-gradient(115deg, rgba(242,246,252,0.62) 0 3px, rgba(242,246,252,0.10) 3px 7px)`;
+const HATCH_GREEN = `repeating-linear-gradient(115deg, rgba(61,220,151,0.68) 0 3px, rgba(61,220,151,0.12) 3px 7px)`;
+
 function UncertaintyBar({
   low,
   high,
@@ -49,21 +63,53 @@ function UncertaintyBar({
       aria-valuemin={0}
       aria-valuemax={target}
       aria-label={`${label}: at least ${low} of ${target} grams, possibly up to ${high}`}
-      className="relative h-1.5 w-full overflow-hidden rounded-full bg-base-800"
+      /* 10px, not 6px: two distinguishable states need the room to be distinguishable. */
+      className="relative h-2.5 w-full overflow-hidden rounded-full bg-base-800 ring-1 ring-inset ring-base-700"
     >
-      {/* Guaranteed: everything up to the low end of the range. */}
+      {/* Guaranteed: everything up to the low end of the range. Full-strength ink. */}
       <div
-        className={`absolute inset-y-0 left-0 rounded-full ${met ? "bg-accent-green" : "bg-ink-lo"}`}
+        className={`absolute inset-y-0 left-0 rounded-l-full ${
+          met ? "bg-accent-green" : "bg-ink-hi"
+        } ${highPct <= lowPct ? "rounded-r-full" : ""}`}
         style={{ width: `${lowPct}%` }}
       />
-      {/* The part that rests on an estimate. Same hue, visibly less certain. */}
+      {/* The part that rests on an estimate. */}
       {highPct > lowPct ? (
         <div
-          className="absolute inset-y-0 rounded-full bg-ink-lo/35"
-          style={{ left: `${lowPct}%`, width: `${highPct - lowPct}%` }}
+          className="absolute inset-y-0 rounded-r-full"
+          style={{
+            left: `${lowPct}%`,
+            width: `${highPct - lowPct}%`,
+            backgroundImage: met ? HATCH_GREEN : HATCH_INK,
+          }}
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Shows the two states rather than only describing them. These swatches carry no
+ * quantity, so they are not the "fake Amount built to satisfy a prop type" that an
+ * earlier pass rightly removed — they are the key to the encoding, which is the
+ * one thing on this screen that must never be the quietest element.
+ */
+function BarLegend() {
+  return (
+    <p className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] leading-relaxed text-ink-mid">
+      <span className="flex items-center gap-2">
+        <span aria-hidden="true" className="h-2.5 w-7 rounded-full bg-ink-hi" />
+        Logged
+      </span>
+      <span className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="h-2.5 w-7 rounded-full ring-1 ring-inset ring-base-700"
+          style={{ backgroundImage: HATCH_INK }}
+        />
+        Estimated range
+      </span>
+    </p>
   );
 }
 
@@ -153,15 +199,17 @@ export function DayState({
       </div>
 
       {/*
-        States the convention once. An earlier version rendered a sample chip here
-        by constructing a zero-gram estimated `Amount` purely for decoration — a
-        fake value built to satisfy a component's prop type is exactly how bogus
-        data ends up somewhere load-bearing later, so it says it in words instead.
+        States the convention once — and at the same weight as every other piece of
+        body copy. It sat at 12px/ink-lo, which made the sentence that teaches the
+        whole visual language the faintest text on the screen.
       */}
-      <p className="mt-5 border-t border-base-800 pt-3.5 text-[12px] leading-relaxed text-ink-lo">
-        Ranges appear wherever a number rests on an estimate, and a total stays as soft as its
-        softest row.
-      </p>
+      <div className="mt-5 flex flex-col gap-2.5 border-t border-base-800 pt-4">
+        <BarLegend />
+        <p className="text-[13px] leading-relaxed text-ink-mid">
+          Ranges appear wherever a number rests on an estimate, and a total stays as soft as its
+          softest row.
+        </p>
+      </div>
     </section>
   );
 }
