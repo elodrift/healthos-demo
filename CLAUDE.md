@@ -587,3 +587,32 @@ Diagnosing which surface is which, without guessing:
 # production: large `age` means the build predates a recent env change
 curl -sI https://healthos-demo-chi.vercel.app/privacy | grep -iE '^(age|x-vercel-id|date)'
 ```
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues (`github.com/elodrift/healthos-demo`), via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+## Standing rules (from the 2026-08 audit)
+
+ADR numbers cite the founder's decision vault (external to this repo). `docs/adr/`
+here is for repo-local technical decisions only.
+
+0. **No clinical rule in TypeScript, ever.** Not a floor, ceiling, cutoff or
+   interaction. This repo displays; the engine decides. (ADR-023)
+1. All responses carrying user health data go through `jsonPrivate()`.
+2. Never build a redirect target from request headers. Use `whoopRedirectOrigin()`
+   or `publicOrigin()`.
+3. Never add `force-dynamic` to a route that resolves a session — it is already
+   dynamic, and the directive silently kills every fetch cache in the segment.
+4. Every mutating endpoint takes a named bucket from `lib/rate-limit.ts`.
+5. A numeric nutrition field never ships without its provenance sibling
+   (`estimated`, `confidence`, `basis`, `portionBasis`, `timeBasis`) in the same object.
+6. Captions are tested by asserting the rendered sentence, never by reading the component.
+7. Dependencies are pinned exact — policy as of 2026-08; existing caret ranges are
+   drift, tracked for a pinning pass. Upgrades arrive as PRs through the gate.
