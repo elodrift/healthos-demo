@@ -411,6 +411,8 @@ meal changes the header but not the next proposal. That is the next seam.
 
 ## 6. Working practice
 
+- Commits may land on the chat branch first; if a PR looks stale, check whether the
+  feature branch needs pointing at the chat branch's commits.
 - `npm run dev` — do **not** run `npm run build` against a running dev server.
   It overwrites the dev client chunks, `main-app.js` starts 404ing (or 500ing),
   and the app silently stops hydrating: buttons do nothing and the cause is
