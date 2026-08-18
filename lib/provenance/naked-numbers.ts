@@ -31,6 +31,10 @@ const NUTRITION_FIELDS = new Set([
   "proteing",
   "carbs",
   "carbsg",
+  // `carbG` — singular — is the spelling `lib/food/barcode.ts` and
+  // `app/api/meals/route.ts` actually ship. Its absence here meant every
+  // carbohydrate figure in the app passed the guard unchecked.
+  "carbg",
   "fat",
   "fatg",
   "fiber",
@@ -42,25 +46,55 @@ const NUTRITION_FIELDS = new Set([
   "grams",
   "portiongrams",
   "servinggrams",
+  // Same defect class as `carbg`: `servingG` is the spelling `BarcodeLookup`
+  // actually ships, and only `servingGrams` was covered.
+  "servingg",
 ]);
 
 /**
  * Fields that answer "where did this come from?".
  *
- * `weighed` counts because in this codebase it is the barcode gate's provenance
- * flag; `basis` counts because the WHOOP planner uses it to name its inputs.
+ * These are exactly the five named by standing rule 5, no more. The set had
+ * drifted wider (`source`, `weighed`, `measured`, `provenance`, `range`, `low`,
+ * `high`) which quietly widened the rule the guard was supposed to enforce:
+ * per CONTEXT.md, `source` and `weighed` are the *inputs* that decide
+ * `estimated`, not provenance in their own right, so accepting them let an
+ * object satisfy the guard without ever stating what it knew.
+ *
+ * `portionbasis` and `timebasis` must be listed explicitly. This is a Set of
+ * exact lowercase names, so `basis` does not match `portionBasis` — their
+ * absence was a live false positive on every successful barcode lookup.
  */
 const PROVENANCE_FIELDS = new Set([
   "estimated",
   "confidence",
-  "source",
-  "weighed",
-  "measured",
-  "provenance",
   "basis",
-  "range",
-  "low",
-  "high",
+  "portionbasis",
+  "timebasis",
+]);
+
+/**
+ * Container keys whose own name states the basis of the numbers inside them.
+ *
+ * `per100g: { kcal: 539, carbG: 57 }` is not fake precision: "per 100 g" says
+ * exactly what those figures are measured against, which is the whole of what
+ * the rule asks for. The numbers have no provenance *sibling* because the
+ * provenance is the key above them.
+ *
+ * This is deliberately narrow, and it is NOT the general "inherit provenance
+ * from any ancestor" rule that the walker exists to refuse — a `confidence` on
+ * an envelope still says nothing about which of twelve meals it describes.
+ * Only these exact keys qualify, and only for their immediate numeric children;
+ * it does not propagate further down.
+ *
+ * Distinct from IGNORED_CONTAINER_KEYS on purpose: these values *are* nutrition
+ * claims and should keep being walked, they are simply self-describing.
+ */
+const BASIS_DECLARING_CONTAINERS = new Set([
+  "per100g",
+  "per100ml",
+  "per100",
+  "perserving",
 ]);
 
 /**
@@ -106,9 +140,11 @@ export function findNakedNumbers(input: unknown): NakedNumber[] {
   const found: NakedNumber[] = [];
   const seen = new WeakSet<object>();
 
-  function walk(node: unknown, path: string, ignored: boolean): void {
+  function walk(node: unknown, path: string, ignored: boolean, basisDeclared: boolean): void {
     if (Array.isArray(node)) {
-      node.forEach((item, i) => walk(item, `${path}[${i}]`, ignored));
+      // Carry basisDeclared through indices so `perServing: [{...}]` behaves the
+      // same as `perServing: {...}`.
+      node.forEach((item, i) => walk(item, `${path}[${i}]`, ignored, basisDeclared));
       return;
     }
     if (!isPlainObject(node)) return;
@@ -118,7 +154,8 @@ export function findNakedNumbers(input: unknown): NakedNumber[] {
     seen.add(node);
 
     const keys = Object.keys(node);
-    const hasProvenance = keys.some((k) => PROVENANCE_FIELDS.has(k.toLowerCase()));
+    const hasProvenance =
+      basisDeclared || keys.some((k) => PROVENANCE_FIELDS.has(k.toLowerCase()));
 
     for (const key of keys) {
       const value = node[key];
@@ -137,11 +174,11 @@ export function findNakedNumbers(input: unknown): NakedNumber[] {
         continue;
       }
 
-      walk(value, childPath, childIgnored);
+      walk(value, childPath, childIgnored, BASIS_DECLARING_CONTAINERS.has(key.toLowerCase()));
     }
   }
 
-  walk(input, "", false);
+  walk(input, "", false, false);
   return found;
 }
 

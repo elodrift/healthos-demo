@@ -6,6 +6,12 @@
  * `jsonPrivate` hook only warns.
  */
 import { findNakedNumbers, formatNakedNumbers } from "../lib/provenance/naked-numbers";
+import {
+  LABEL_WITH_SERVING,
+  LABEL_NO_SERVING,
+  RECOGNIZED,
+  UNAVAILABLE,
+} from "../tests/captions/payloads";
 
 type Case = {
   name: string;
@@ -69,7 +75,11 @@ const cases: Case[] = [
   {
     name: "a cyclic payload does not hang the walker",
     payload: (() => {
-      const a: Record<string, unknown> = { grams: 100, source: "barcode" };
+      // Carries real provenance (`estimated`) so the case tests only what it
+      // claims to: termination. It previously leaned on `source`, which is no
+      // longer accepted as provenance, and so began failing for an unrelated
+      // reason — the assertion drifted away from the behaviour it was named for.
+      const a: Record<string, unknown> = { grams: 100, estimated: true };
       a.self = a;
       return a;
     })(),
@@ -92,29 +102,49 @@ const cases: Case[] = [
   },
 
   /*
-   * ---- a real finding from the shipped recognizer shape --------------------
+   * ---- the real fixtures, imported not retyped -----------------------------
    *
-   * This is `RecognitionResult` as `lib/food/recognize.ts` actually returns it:
-   * one `confidence` on the envelope, none on `items[]` or `totals`. Running the
-   * walker over the live shapes flagged 8 fields here.
+   * These are the same objects the caption suite renders, typed as the real
+   * `BarcodeLookup` / `RecognitionResult` unions. Importing them rather than
+   * hand-copying a lookalike is the point: a retyped fixture drifts from the API
+   * it imitates and then passes while the live payload breaks. The first version
+   * of this file hand-copied the recognizer shape and so tested a replica.
    *
-   * It is asserted as EXPECTED-FLAGGED rather than quietly whitelisted, because
-   * it is exactly the case the rule was written for: a per-photo confidence says
-   * nothing about which of six items is the guess. Changing the payload shape is
-   * product code and out of scope for a testing PR — this test pins the finding
-   * so it stays visible and fails loudly if someone "fixes" it by loosening the
-   * walker instead of adding provenance to the rows.
+   * These four cases exist because running the walker over them found two real
+   * defects that every synthetic case had missed.
+   */
+
+  /*
+   * Was a LIVE FALSE POSITIVE: 3 fields flagged on a correctly-provenanced
+   * payload, in dev, on every successful barcode lookup. The macros sit inside
+   * `per100g` while `portionBasis` sits on the parent, so the guard was asking
+   * for a sibling that could not exist. Fixed by treating a basis-declaring
+   * container as its own provenance — "per 100 g" states what the numbers mean.
    */
   {
-    name: "REAL FINDING: recognizer items and totals carry no per-row provenance",
-    payload: {
-      kind: "recognized",
-      items: [{ name: "beef stew", portion: "1 bowl", kcal: 480, protein: 28, carbs: 52, fat: 16 }],
-      totals: { kcal: 480, protein: 28, carbs: 52, fat: 16 },
-      confidence: "medium",
-      caveat: "The broth's oil is hard to judge from the photo.",
-      model: "stub",
-    },
+    name: "REAL FIXTURE: label with a published serving is clean",
+    payload: LABEL_WITH_SERVING,
+    expect: [],
+  },
+  {
+    name: "REAL FIXTURE: label with no serving is clean",
+    payload: LABEL_NO_SERVING,
+    expect: [],
+  },
+
+  /*
+   * Still a real finding, unchanged by the fixes: `confidence` sits on the
+   * envelope and neither `items[]` nor `totals` carries per-row provenance, so
+   * a per-photo confidence is doing duty for six separate claims.
+   *
+   * Asserted as EXPECTED-FLAGGED rather than whitelisted. Changing the payload
+   * shape is product code and out of scope here, so this pins the finding: it
+   * fails loudly if someone "fixes" it by loosening the walker instead of adding
+   * provenance to the rows.
+   */
+  {
+    name: "REAL FIXTURE / FINDING: recognizer rows carry no per-row provenance",
+    payload: RECOGNIZED,
     expect: [
       "items[0].kcal",
       "items[0].protein",
@@ -125,6 +155,50 @@ const cases: Case[] = [
       "totals.carbs",
       "totals.fat",
     ],
+  },
+  {
+    name: "REAL FIXTURE: an unavailable estimate has no numbers to guard",
+    payload: UNAVAILABLE,
+    expect: [],
+  },
+
+  /*
+   * The narrowed container rule must not become "inherit from any ancestor",
+   * which is the whole thing the walker exists to refuse. Nesting one level
+   * deeper under a basis-declaring container gets no free pass.
+   */
+  {
+    name: "a basis-declaring container does not shelter objects nested below it",
+    payload: { per100g: { kcal: 539, breakdown: { proteinG: 6 } } },
+    expect: ["per100g.breakdown.proteinG"],
+  },
+
+  /*
+   * `source` alone is not provenance. Per CONTEXT.md it is one of two *inputs*
+   * that decide `estimated`; on its own it names an origin without saying
+   * whether the figure was measured or guessed.
+   */
+  {
+    name: "source without estimated or confidence is not provenance",
+    payload: { grams: 45, source: "barcode" },
+    expect: ["grams"],
+  },
+
+  /*
+   * The exact spellings the app ships, guarded outside a basis-declaring
+   * container so the dictionary itself is what is under test.
+   *
+   * This case exists because mutation testing found the gap: deleting `carbg`
+   * from NUTRITION_FIELDS left all sixteen other cases passing. The label
+   * fixtures are clean either way now that `per100g` declares its own basis, and
+   * the recognizer fixture spells it `carbs` — so nothing anywhere proved that a
+   * bare `carbG` is guarded at all. A fix with no failing test behind it is a
+   * fix that can silently regress.
+   */
+  {
+    name: "carbG and servingG — the shipped spellings — are guarded",
+    payload: { kcal: 612, proteinG: 31, carbG: 58, fatG: 24, servingG: 30 },
+    expect: ["kcal", "proteinG", "carbG", "fatG", "servingG"],
   },
 ];
 
