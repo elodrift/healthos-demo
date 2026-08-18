@@ -88,6 +88,7 @@ jobs:
           npm run test:agent
           npm run test:trace
           npm run test:replan
+          npm run test:provenance
 
       # The build is the only thing that type-checks generated route types and
       # catches invalid route exports, which tsc alone does not see.
