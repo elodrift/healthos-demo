@@ -588,6 +588,24 @@ Diagnosing which surface is which, without guessing:
 curl -sI https://healthos-demo-chi.vercel.app/privacy | grep -iE '^(age|x-vercel-id|date)'
 ```
 
+## 7. Review gate (Gate B)
+
+GitHub's built-in "require approvals" needs a second GitHub account to approve
+against, which doesn't exist in this setup. So Gate B mechanizes review
+*evidence* instead of review *approval*: the `verify` workflow's "Review gate"
+step (`.github/scripts/review-gate.sh`) fails a PR that changes more than
+~50 lines, or touches `lib/planner/`, `lib/food/`, `app/api/`, or
+`lib/auth.ts`, unless the PR contains `reviews/<tree-hash>.md` with a line
+reading exactly `verdict: PASS` — `<tree-hash>` being the git tree hash of the
+PR's head commit, so the review is bound to that exact code, not just to a PR
+number that can gain more commits after review.
+
+**What CI does not and cannot check: who wrote the review.** That is a process
+rule, not a git-verifiable one — *whichever agent didn't write the code is the
+one that writes the review*. Follow it by convention; the gate only proves a
+passing review file exists at the right hash, not that it was independently
+written.
+
 ## Agent skills
 
 ### Issue tracker
