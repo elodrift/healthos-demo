@@ -588,6 +588,36 @@ Diagnosing which surface is which, without guessing:
 curl -sI https://healthos-demo-chi.vercel.app/privacy | grep -iE '^(age|x-vercel-id|date)'
 ```
 
+## 7. Review gate (Gate B)
+
+GitHub's built-in "require approvals" needs a second GitHub account to approve
+against, which doesn't exist in this setup. So Gate B mechanizes review
+*evidence* instead of review *approval*: the `verify` workflow's "Review gate"
+step (`.github/scripts/review-gate.sh`) fails a PR that changes more than
+~50 lines, or touches `lib/planner/`, `lib/food/`, `app/api/`, or
+`lib/auth.ts`, unless the PR contains `reviews/<diff-hash>.md` with a line
+reading exactly `verdict: PASS` — `<diff-hash>` being a sha256 of the PR's
+diff against its base branch (path, status, and patch text of every changed
+file, `reviews/` itself excluded), so the review is bound to the exact code
+changes under review, not just to a PR number that can gain more commits
+after review.
+
+`<diff-hash>` used to be the git tree hash of the PR's head commit instead.
+That was self-referential: writing `reviews/<hash>.md` is itself a commit,
+which changes the head commit's tree, which changes the hash the file would
+need to be named — so no PR that triggered the gate could ever satisfy it.
+Confirmed by reproduction, not just reasoned about: cloning the branch,
+computing the head's tree hash, adding a file named for it, and recomputing
+showed the hash moving out from under the file. Hashing the diff against base
+instead — with `reviews/` excluded from the inputs — is stable under adding
+the evidence file, because that file is never part of what gets hashed.
+
+**What CI does not and cannot check: who wrote the review.** That is a process
+rule, not a git-verifiable one — *whichever agent didn't write the code is the
+one that writes the review*. Follow it by convention; the gate only proves a
+passing review file exists at the right hash, not that it was independently
+written.
+
 ## Agent skills
 
 ### Issue tracker

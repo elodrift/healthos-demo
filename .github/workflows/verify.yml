@@ -57,6 +57,23 @@ jobs:
         run: npm audit --audit-level=high
         continue-on-error: true
 
+      # Gate B: review evidence, not review approval. GitHub's "require
+      # approvals" needs a second GitHub account, which doesn't exist here, so
+      # a large or sensitive PR must instead ship reviews/<tree-hash>.md
+      # (tree hash of the PR's head commit) containing "verdict: PASS". CI can
+      # only confirm the file exists — that a different agent than the one who
+      # wrote the diff is the one who wrote it is a process rule, checked by
+      # nothing here. See CLAUDE.md "Review gate (Gate B)".
+      #
+      # Talks to the GitHub API (via `gh`) rather than diffing local git
+      # objects: this remote won't fetch a bare commit SHA that isn't a ref
+      # tip, which a straight `git fetch <sha>` needs.
+      - name: Review gate (Gate B)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/review-gate.sh "${{ github.event.pull_request.number }}"
+
       # Offline tests only. The scripts that hit Neon, WHOOP or Open Food Facts
       # live cannot run deterministically here, and running test:barcode in CI
       # would spend the shared Open Food Facts rate budget on every push.
