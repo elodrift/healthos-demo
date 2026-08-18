@@ -212,6 +212,28 @@ const cases: Case[] = [
   },
 
   /*
+   * `per100g` is the ONLY sheltering key, and this case is what holds the set to
+   * one. Deleting `per100ml` from the set previously broke nothing — all 20 cases
+   * stayed green — which is exactly why it survived three rounds of review: dead
+   * code defended by an unchecked assumption ("a drink will arrive under
+   * per100ml"), with no test to contradict it.
+   *
+   * `parseProduct` reads the hardcoded `*_100g` Open Food Facts fields and always
+   * writes `per100g`, solid or liquid alike; `LABEL_NO_SERVING` is already a
+   * liquid shipping under `per100g`. So no `per100ml` payload exists here, and
+   * until one does its numbers are naked.
+   *
+   * If someone adds real `per100ml` support, this case fails and asks for the
+   * payload as evidence. That is the intent — a tripwire against re-widening the
+   * rule on a hunch, not a claim that `per100ml` is wrong in general.
+   */
+  {
+    name: "per100ml does not shelter — no such payload exists in this codebase",
+    payload: { per100ml: { kcal: 42, carbG: 11 } },
+    expect: ["per100ml.kcal", "per100ml.carbG"],
+  },
+
+  /*
    * `source` alone is not provenance. Per CONTEXT.md it is one of two *inputs*
    * that decide `estimated`; on its own it names an origin without saying
    * whether the figure was measured or guessed.

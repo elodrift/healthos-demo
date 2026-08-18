@@ -88,7 +88,7 @@ const PROVENANCE_FIELDS = new Set([
  * Scope, stated exactly, because the first version of this comment claimed a
  * guarantee the code did not deliver: these keys cover the numeric fields of the
  * object they name, reached either directly (`per100g: {...}`) or across a single
- * array layer (`perServing: [{...}]`). Nothing deeper — not an object under an
+ * array layer (`per100g: [{...}]`). Nothing deeper — not an object under an
  * object, and not an array under an array, which is the case that escaped. Both
  * axes are pinned by tests in `scripts/test-provenance.ts`.
  *
@@ -96,19 +96,26 @@ const PROVENANCE_FIELDS = new Set([
  * claims and should keep being walked, they are simply self-describing.
  */
 /*
- * Only real label conventions, and only two.
+ * Exactly one key, because exactly one exists.
  *
- * `per100g` is what `LabelPer100g` actually ships. `per100ml` is the same
- * convention for liquids and will appear the first time a drink is scanned;
- * omitting it would reproduce exactly the false positive this exception exists
- * to fix.
+ * `per100g` is the only basis-declaring container the app ships: `parseProduct`
+ * reads the hardcoded `*_100g` Open Food Facts fields and writes the single
+ * `per100g` field on `LabelPer100g`. There is no second shape.
  *
- * `per100` and `perServing` were here and are now gone: I invented both, neither
- * has a call site, and neither is a label convention. Every speculative entry
- * widens the rule for a shape that does not exist, against nothing — and this
- * guard's only real value is being narrow by construction.
+ * `per100`, `perServing` and `per100ml` were all here and are all gone, for the
+ * same reason: no call site. The first two I invented outright. `per100ml` was
+ * the more seductive mistake — it sounds like a real label convention, and it is
+ * one in the world, but not in this codebase: `BarcodeLookup` has one field
+ * always named `per100g` whether the product is solid or liquid, and
+ * `LABEL_NO_SERVING` is already a liquid shipping under `per100g`. The comment
+ * that justified it claimed a drink would arrive under `per100ml` "the first time
+ * one is scanned" — false against the code as it stands, and unverified when
+ * written.
+ *
+ * Every speculative entry widens the rule for a shape that does not exist,
+ * against no test. Add a key here only alongside the payload that needs it.
  */
-const BASIS_DECLARING_CONTAINERS = new Set(["per100g", "per100ml"]);
+const BASIS_DECLARING_CONTAINERS = new Set(["per100g"]);
 
 /**
  * Keys whose numeric contents are not nutrition claims and must not be flagged.
