@@ -98,8 +98,17 @@ test("bug 1: a photo with no capture time says so, and names the upload clock", 
 
   expect(text).toContain("this photo carried no capture time");
   expect(text).toContain("not necessarily when you ate");
-  // The failure mode is the card sounding certain about a time it was never given.
-  expect(text).not.toContain("from the photo");
+  /*
+   * The failure mode is the card sounding certain about a time it was never
+   * given, which in this component reads "Taken at 1:15 PM, from the photo."
+   *
+   * Asserting on the bare phrase "from the photo" is what this test did first,
+   * and it failed against correct output: the estimator's own uncertainty note
+   * ("The broth's oil is hard to judge from the photo") contains that phrase
+   * innocently. Two different sentences, one substring. The claim being
+   * forbidden here is specifically a *sourced clock*, so match the clock.
+   */
+  expect(text).not.toMatch(/Taken (at|\d)[^.]*from the photo/);
 });
 
 // ---------------------------------------------------------------------------
