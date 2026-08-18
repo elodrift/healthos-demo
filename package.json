@@ -23,7 +23,8 @@
     "verify:db": "npm run verify && npm run test:privacy",
     "test:capture": "tsx scripts/test-capture-time.ts",
     "audit": "node audit/audit.mjs --fail-on critical --ignore SEC001",
-    "test:limits": "tsx scripts/test-rate-limit.ts"
+    "test:limits": "tsx scripts/test-rate-limit.ts",
+    "test:captions": "playwright test"
   },
   "dependencies": {
     "@types/leaflet": "^1.9.22",
@@ -43,6 +44,7 @@
     "zustand": "^4.5.5"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@types/node": "^20.14.9",
     "@types/pg": "^8.20.4",
     "@types/react": "^18.3.11",
