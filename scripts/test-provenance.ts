@@ -166,11 +166,49 @@ const cases: Case[] = [
    * The narrowed container rule must not become "inherit from any ancestor",
    * which is the whole thing the walker exists to refuse. Nesting one level
    * deeper under a basis-declaring container gets no free pass.
+   *
+   * There are TWO axes to nest along, and the object one below was the only one
+   * tested at first. That is how the array leak survived review: a case can pin a
+   * rule on one axis and say nothing about the other.
    */
   {
     name: "a basis-declaring container does not shelter objects nested below it",
     payload: { per100g: { kcal: 539, breakdown: { proteinG: 6 } } },
     expect: ["per100g.breakdown.proteinG"],
+  },
+
+  /*
+   * The same rule down the array axis. This was a REAL ESCAPE, not a hypothetical:
+   * the array branch forwarded the basis flag unchanged, and because an array has
+   * no key of its own to reset the flag against, it rode indefinitely. Before the
+   * fix `per100g: [[{...}]]` came back completely clean, at any depth.
+   */
+  {
+    name: "a basis-declaring container does not shelter arrays nested below it",
+    payload: { per100g: [[{ kcal: 500, carbG: 30 }]] },
+    expect: ["per100g[0][0].kcal", "per100g[0][0].carbG"],
+  },
+  {
+    name: "the array escape does not reopen at greater depth",
+    payload: { per100g: [[[{ kcal: 500 }]]] },
+    expect: ["per100g[0][0][0].kcal"],
+  },
+
+  /*
+   * The other side of the fix, so it cannot be over-corrected into uselessness:
+   * ONE array layer is legitimate. `per100g: [{...}]` is just how the rows are
+   * held, and the key above them still describes them. If this ever starts
+   * flagging, the guard has begun crying wolf on correct payloads — the failure
+   * mode that gets a guard switched off.
+   *
+   * Uses `per100g` deliberately: a key the app actually ships. This case first
+   * used `perServing`, which turned out to have zero call sites — so it was
+   * proving the rule held for a shape that does not exist.
+   */
+  {
+    name: "a single array layer under a basis-declaring container stays clean",
+    payload: { per100g: [{ kcal: 500, carbG: 30 }] },
+    expect: [],
   },
 
   /*
