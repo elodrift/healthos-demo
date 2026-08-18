@@ -84,18 +84,31 @@ const PROVENANCE_FIELDS = new Set([
  * This is deliberately narrow, and it is NOT the general "inherit provenance
  * from any ancestor" rule that the walker exists to refuse — a `confidence` on
  * an envelope still says nothing about which of twelve meals it describes.
- * Only these exact keys qualify, and only for their immediate numeric children;
- * it does not propagate further down.
+ *
+ * Scope, stated exactly, because the first version of this comment claimed a
+ * guarantee the code did not deliver: these keys cover the numeric fields of the
+ * object they name, reached either directly (`per100g: {...}`) or across a single
+ * array layer (`perServing: [{...}]`). Nothing deeper — not an object under an
+ * object, and not an array under an array, which is the case that escaped. Both
+ * axes are pinned by tests in `scripts/test-provenance.ts`.
  *
  * Distinct from IGNORED_CONTAINER_KEYS on purpose: these values *are* nutrition
  * claims and should keep being walked, they are simply self-describing.
  */
-const BASIS_DECLARING_CONTAINERS = new Set([
-  "per100g",
-  "per100ml",
-  "per100",
-  "perserving",
-]);
+/*
+ * Only real label conventions, and only two.
+ *
+ * `per100g` is what `LabelPer100g` actually ships. `per100ml` is the same
+ * convention for liquids and will appear the first time a drink is scanned;
+ * omitting it would reproduce exactly the false positive this exception exists
+ * to fix.
+ *
+ * `per100` and `perServing` were here and are now gone: I invented both, neither
+ * has a call site, and neither is a label convention. Every speculative entry
+ * widens the rule for a shape that does not exist, against nothing — and this
+ * guard's only real value is being narrow by construction.
+ */
+const BASIS_DECLARING_CONTAINERS = new Set(["per100g", "per100ml"]);
 
 /**
  * Keys whose numeric contents are not nutrition claims and must not be flagged.
@@ -142,9 +155,24 @@ export function findNakedNumbers(input: unknown): NakedNumber[] {
 
   function walk(node: unknown, path: string, ignored: boolean, basisDeclared: boolean): void {
     if (Array.isArray(node)) {
-      // Carry basisDeclared through indices so `perServing: [{...}]` behaves the
-      // same as `perServing: {...}`.
-      node.forEach((item, i) => walk(item, `${path}[${i}]`, ignored, basisDeclared));
+      /*
+       * Carry basisDeclared across ONE array hop, so `perServing: [{...}]`
+       * behaves the same as `perServing: {...}` — the array is just how the rows
+       * are held, and the key above it still describes them.
+       *
+       * It must not survive a second hop. An array has no key of its own to
+       * recompute the flag against, which is what the object branch below uses
+       * to reset it; forwarding unchanged therefore let the flag ride
+       * indefinitely, and `per100g: [[{ kcal: 500 }]]` came back clean at any
+       * depth. That is the inherit-from-any-ancestor behaviour this guard exists
+       * to refuse, reachable through the array axis instead of the object one.
+       *
+       * Resetting on a nested array is the narrow reading: "per 100 g" describes
+       * the rows one level down, and says nothing about a list of lists.
+       */
+      node.forEach((item, i) =>
+        walk(item, `${path}[${i}]`, ignored, Array.isArray(item) ? false : basisDeclared),
+      );
       return;
     }
     if (!isPlainObject(node)) return;
