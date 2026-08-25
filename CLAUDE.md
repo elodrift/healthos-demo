@@ -646,3 +646,19 @@ here is for repo-local technical decisions only.
 6. Captions are tested by asserting the rendered sentence, never by reading the component.
 7. Dependencies are pinned exact — policy as of 2026-08; existing caret ranges are
    drift, tracked for a pinning pass. Upgrades arrive as PRs through the gate.
+## Build blocks (standing rule, 2026-08-25 — read this before anything else)
+
+**Read `BUILD-BLOCKS.md` at the repo root at the start of every session.** It names the
+ACTIVE BLOCK. Only work inside the active block may be built, fixed, tidied, or improved.
+
+If asked to do work outside the active block, STOP and reply:
+*"That belongs to Block N. The active block is X. Do you want to change the active block?"*
+Do not do it anyway. Do not do it because it is small. Do not do it because you are
+already in the file. Changing the active block is a founder decision.
+
+A block is done when it can be demonstrated on a phone in under a minute — not when
+tests pass, not when a review clears, not when it merges.
+
+Order inside a block: grill → build → one review → demo → close. One review per slice,
+and only for engine, ledger or safety changes. A defect that cannot happen in production
+is a backlog row, not a blocker. Agents decide code; the founder decides product and safety.
