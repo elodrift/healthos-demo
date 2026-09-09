@@ -20,9 +20,22 @@ export interface Slot {
 /** A long-horizon outcome, stated in words. It selects which Targets matter. */
 export type Goal = "fatLoss";
 
+/**
+ * The full nutritional cost of one eating event. Widens in later cycles to
+ * carry saturated fat, purine and fructose load, and Glycaemic Load.
+ */
+export type Footprint = Macros;
+
+/** One pre-costed eating option. The closed set a Swap may draw from. */
+export interface Meal {
+  id: string;
+  footprint: Footprint;
+}
+
 /** The durable facts HealthOS plans from. */
 export interface Profile {
   goal: Goal;
+  meals: Meal[];
   slots: Slot[];
 }
 
@@ -43,6 +56,7 @@ export interface Directive {
 /** The full set of Directives for one day, ordered in time. */
 export interface Plan {
   targets: Macros;
+  headroom: Macros;
   directives: Directive[];
 }
 
@@ -58,14 +72,42 @@ const MACRO_TIMELINE: Record<Goal, Macros> = {
   fatLoss: { protein: 180, carbohydrate: 170, fat: 65 },
 };
 
-/** The append-only record of every Confirmation and Deviation. */
-export type Ledger = never[];
+/**
+ * The Athlete's tap asserting a Directive happened as prescribed.
+ *
+ * It records which Meal was confirmed rather than looking it up in the Plan:
+ * ADR-0002 makes past Plans unstable as the rules evolve, and what the Athlete
+ * actually ate must not change retroactively with them.
+ */
+export interface Confirmation {
+  kind: "confirmation";
+  slotId: string;
+  mealId: string;
+  at: TimeOfDay;
+}
 
-/** The portion of the day's Targets a Slot carries, from its percentage share. */
-const shareOf = (targets: Macros, share: number): Macros => ({
-  protein: (targets.protein * share) / 100,
-  carbohydrate: (targets.carbohydrate * share) / 100,
-  fat: (targets.fat * share) / 100,
+/** The append-only record of every Confirmation and Deviation. */
+export type Ledger = readonly Confirmation[];
+
+/** The Footprint of what a Ledger row consumed. */
+const footprintOf = (profile: Profile, row: Confirmation): Footprint => {
+  const meal = profile.meals.find((candidate) => candidate.id === row.mealId);
+  if (!meal) {
+    throw new Error(`Confirmed Meal "${row.mealId}" is not in the Profile`);
+  }
+  return meal.footprint;
+};
+
+/**
+ * The portion of `macros` a Slot carries, from its share of `outOf`.
+ *
+ * Multiply before dividing: `180 * 35 / 100` is 63, where `180 * 0.35` is
+ * 62.99999999999999.
+ */
+const shareOf = (macros: Macros, share: number, outOf: number): Macros => ({
+  protein: (macros.protein * share) / outOf,
+  carbohydrate: (macros.carbohydrate * share) / outOf,
+  fat: (macros.fat * share) / outOf,
 });
 
 /**
@@ -79,15 +121,41 @@ export const derivePlan = (
   ledger: Ledger,
   now: Date,
 ): Plan => {
+  const totalShare = profile.slots.reduce((sum, slot) => sum + slot.share, 0);
+  if (totalShare !== 100) {
+    throw new Error(`Slot shares must total 100, got ${totalShare}`);
+  }
+
   const targets = MACRO_TIMELINE[profile.goal];
+
+  const headroom = ledger.reduce<Macros>((remaining, row) => {
+    const spent = footprintOf(profile, row);
+    return {
+      protein: remaining.protein - spent.protein,
+      carbohydrate: remaining.carbohydrate - spent.carbohydrate,
+      fat: remaining.fat - spent.fat,
+    };
+  }, targets);
+
+  const isSpent = (slot: Slot) =>
+    ledger.some((row) => row.slotId === slot.id);
+
+  const remainingShare = profile.slots
+    .filter((slot) => !isSpent(slot))
+    .reduce((sum, slot) => sum + slot.share, 0);
 
   const directives = [...profile.slots]
     .sort((a, b) => a.at.localeCompare(b.at))
     .map((slot) => ({
       slotId: slot.id,
       at: slot.at,
-      targets: shareOf(targets, slot.share),
+      // A Slot already answered for keeps the Targets it was prescribed with;
+      // the Plan records what it asked for. The Slots still to come divide
+      // what is actually left.
+      targets: isSpent(slot)
+        ? shareOf(targets, slot.share, 100)
+        : shareOf(headroom, slot.share, remainingShare),
     }));
 
-  return { targets, directives };
+  return { targets, headroom, directives };
 };
