@@ -70,8 +70,13 @@ export interface Macros {
  *
  * `closestAchievable` is the glossary's name for the state the Athlete sees as
  * an unreachable Target: the nearest day HealthOS can still prescribe.
+ *
+ * `unactioned` is a Slot whose time passed with neither a Confirmation nor a
+ * Deviation against it. Nothing was eaten, so it takes nothing from Headroom —
+ * but it can no longer be prescribed either, and its share goes to the Slots
+ * still ahead.
  */
-export type DirectiveState = "onTarget" | "closestAchievable";
+export type DirectiveState = "onTarget" | "closestAchievable" | "unactioned";
 
 /** One prescribed action placed at a time in a Plan. */
 export interface Directive {
@@ -209,6 +214,10 @@ interface Prescription {
   state: DirectiveState;
 }
 
+/** `now` as a `HH:MM` time of day, comparable against a Slot's placement. */
+const timeOfDay = (now: Date): TimeOfDay =>
+  `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+
 /**
  * The Meal in the closed set that sits closest to a Slot's Targets without
  * breaking what is left of the Caps.
@@ -297,8 +306,12 @@ export const derivePlan = (
   const isSpent = (slot: Slot) =>
     ledger.some((row) => row.slotId === slot.id);
 
+  // A Slot placed at the current minute is due, not past.
+  const nowAt = timeOfDay(now);
+  const isUnactioned = (slot: Slot) => !isSpent(slot) && slot.at < nowAt;
+
   const remainingShare = profile.slots
-    .filter((slot) => !isSpent(slot))
+    .filter((slot) => !isSpent(slot) && !isUnactioned(slot))
     .reduce((sum, slot) => sum + slot.share, 0);
 
   // Selection walks the day in order, drawing on what is left of the Cap as it
@@ -312,14 +325,14 @@ export const derivePlan = (
       // A Slot already answered for keeps the Targets it was prescribed with;
       // the Plan records what it asked for. The Slots still to come divide
       // what is actually left.
-      if (isSpent(slot)) {
+      if (isSpent(slot) || isUnactioned(slot)) {
         return {
           slotId: slot.id,
           at: slot.at,
           targets: shareOf(targets, slot.share, 100),
           caps: capShareOf(caps, slot.share, 100),
           meal: null,
-          state: "onTarget",
+          state: isSpent(slot) ? "onTarget" : "unactioned",
         };
       }
 

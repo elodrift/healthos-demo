@@ -228,3 +228,27 @@ it("prescribes the least damaging Meal when the Cap leaves no legal one", () => 
     { slotId: "dinner", meal: "greekYogurt", state: "closestAchievable" },
   ]);
 });
+
+it("hands an unactioned past Slot's share to the Slots still ahead", () => {
+  // 17:00: the 16:00 snack came and went with neither a Confirmation nor a
+  // Deviation against it. Nothing was eaten, so nothing leaves Headroom.
+  const plan = derivePlan(profile, burgerForLunch, new Date("2026-09-09T17:00:00"));
+  const bySlot = Object.fromEntries(
+    plan.directives.map((directive) => [directive.slotId, directive]),
+  );
+
+  expect(bySlot.eveningSnack.state).toBe("unactioned");
+  expect(bySlot.eveningSnack.meal).toBeNull();
+
+  // Dinner is the only Slot left, so it carries the whole 108/54/18 that
+  // remains — the snack's 10 share is released rather than held back.
+  expect(bySlot.dinner.targets).toEqual({
+    protein: 108,
+    carbohydrate: 54,
+    fat: 18,
+  });
+
+  // A Slot answered for is never unactioned, however far in the past it sits.
+  expect(bySlot.breakfast.state).toBe("onTarget");
+  expect(bySlot.lunch.state).toBe("onTarget");
+});

@@ -67,7 +67,7 @@ Replacing one Directive with an alternative that satisfies the same Targets. Off
 _Avoid_: substitute, alternative, replace
 
 **Closest Achievable**:
-The state of a Plan whose remaining Slots cannot reach the day's Targets under any combination of Meals, so HealthOS prescribes the nearest day it can and says so. A Closest Achievable Plan still obeys every Cap.
+The state of a Plan whose remaining Slots cannot reach the day's Targets under any combination of Meals, so HealthOS prescribes the nearest day it can and says so. A Closest Achievable Plan adds as little to an exceeded Cap as it can.
 _Avoid_: best effort, fallback, degraded, partial
 
 ## Reality
