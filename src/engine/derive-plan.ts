@@ -65,12 +65,23 @@ export interface Macros {
   fat: number;
 }
 
+/**
+ * Whether a Directive reaches the Targets it was given.
+ *
+ * `closestAchievable` is the glossary's name for the state the Athlete sees as
+ * an unreachable Target: the nearest day HealthOS can still prescribe.
+ */
+export type DirectiveState = "onTarget" | "closestAchievable";
+
 /** One prescribed action placed at a time in a Plan. */
 export interface Directive {
   slotId: string;
   at: TimeOfDay;
   targets: Macros;
   caps: Caps;
+  /** The Meal to eat. Null on a Slot already answered for. */
+  meal: Meal | null;
+  state: DirectiveState;
 }
 
 /**
@@ -162,6 +173,16 @@ const shareOf = (macros: Macros, share: number, outOf: number): Macros => ({
   fat: (macros.fat * share) / outOf,
 });
 
+/**
+ * How far a Meal sits from the Targets a Slot was given, in grams summed
+ * across the Macros. Crude — it treats a gram of protein as a gram of carb —
+ * but it is the whole of the selection rule, and it is visible here.
+ */
+const distanceFrom = (targets: Macros, meal: Meal): number =>
+  Math.abs(meal.footprint.protein - targets.protein) +
+  Math.abs(meal.footprint.carbohydrate - targets.carbohydrate) +
+  Math.abs(meal.footprint.fat - targets.fat);
+
 /** The portion of a Cap a Slot may draw on, from its share of `outOf`. */
 const capShareOf = (caps: Caps, share: number, outOf: number): Caps => ({
   saturatedFat: (caps.saturatedFat * share) / outOf,
@@ -181,6 +202,47 @@ const capsFor = (biomarkers: Biomarker[]): Caps =>
     }),
     { saturatedFat: Infinity },
   );
+
+/** What a Slot is prescribed, and whether it reaches its Targets. */
+interface Prescription {
+  meal: Meal;
+  state: DirectiveState;
+}
+
+/**
+ * The Meal in the closed set that sits closest to a Slot's Targets without
+ * breaking what is left of the Caps.
+ *
+ * When the Cap is already spent, nothing in the set obeys it — the Athlete has
+ * eaten past the ceiling and no later Meal can unspend it. The Athlete is still
+ * told what to eat (ADR-0001), so the Directive takes the Meal that adds least
+ * to the breach and says plainly that the Target is out of reach.
+ */
+const chooseMeal = (
+  meals: Meal[],
+  targets: Macros,
+  capsLeft: Caps,
+): Prescription => {
+  const withinCaps = meals.filter(
+    (meal) => meal.footprint.saturatedFat <= capsLeft.saturatedFat,
+  );
+
+  if (withinCaps.length > 0) {
+    return {
+      meal: withinCaps.reduce((best, meal) =>
+        distanceFrom(targets, meal) < distanceFrom(targets, best) ? meal : best,
+      ),
+      state: "onTarget",
+    };
+  }
+
+  return {
+    meal: meals.reduce((best, meal) =>
+      meal.footprint.saturatedFat < best.footprint.saturatedFat ? meal : best,
+    ),
+    state: "closestAchievable",
+  };
+};
 
 /**
  * Derives the Plan for the day containing `now`. Pure: the same Profile,
@@ -239,21 +301,47 @@ export const derivePlan = (
     .filter((slot) => !isSpent(slot))
     .reduce((sum, slot) => sum + slot.share, 0);
 
+  // Selection walks the day in order, drawing on what is left of the Cap as it
+  // goes. A Cap is a daily ceiling, not a per-Slot one: dividing it by share
+  // would starve a small Slot of an allowance no Meal could fit inside.
+  let capsLeft = headroom.caps;
+
   const directives = [...profile.slots]
     .sort((a, b) => a.at.localeCompare(b.at))
-    .map((slot) => ({
-      slotId: slot.id,
-      at: slot.at,
+    .map((slot): Directive => {
       // A Slot already answered for keeps the Targets it was prescribed with;
       // the Plan records what it asked for. The Slots still to come divide
       // what is actually left.
-      targets: isSpent(slot)
-        ? shareOf(targets, slot.share, 100)
-        : shareOf(headroom.macros, slot.share, remainingShare),
-      caps: isSpent(slot)
-        ? capShareOf(caps, slot.share, 100)
-        : capShareOf(headroom.caps, slot.share, remainingShare),
-    }));
+      if (isSpent(slot)) {
+        return {
+          slotId: slot.id,
+          at: slot.at,
+          targets: shareOf(targets, slot.share, 100),
+          caps: capShareOf(caps, slot.share, 100),
+          meal: null,
+          state: "onTarget",
+        };
+      }
+
+      const slotTargets = shareOf(headroom.macros, slot.share, remainingShare);
+      const { meal, state } = chooseMeal(profile.meals, slotTargets, capsLeft);
+
+      capsLeft = {
+        saturatedFat: Math.max(
+          0,
+          capsLeft.saturatedFat - meal.footprint.saturatedFat,
+        ),
+      };
+
+      return {
+        slotId: slot.id,
+        at: slot.at,
+        targets: slotTargets,
+        caps: capsLeft,
+        meal,
+        state,
+      };
+    });
 
   return { targets, headroom, directives };
 };

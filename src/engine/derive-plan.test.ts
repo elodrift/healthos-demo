@@ -193,3 +193,38 @@ it("leaves the rest of the day no saturated fat once the Cap is spent", () => {
     { slotId: "dinner", caps: { saturatedFat: 0 } },
   ]);
 });
+
+it("prescribes the closest Meal in the closed set to each Slot's Targets", () => {
+  const plan = derivePlan(profile, [], morning);
+
+  // Selection runs through the day drawing on what is left of the 15g Cap:
+  // 15 -> 12 -> 9 -> 7, so no Slot is starved by an invented per-Slot ceiling.
+  expect(
+    plan.directives.map(({ slotId, meal }) => ({
+      slotId,
+      meal: meal?.id ?? null,
+    })),
+  ).toEqual([
+    { slotId: "breakfast", meal: "chickenSalad" },
+    { slotId: "lunch", meal: "chickenSalad" },
+    { slotId: "eveningSnack", meal: "greekYogurt" },
+    { slotId: "dinner", meal: "salmonRice" },
+  ]);
+
+  expect(plan.directives.every(({ state }) => state === "onTarget")).toBe(true);
+});
+
+it("prescribes the least damaging Meal when the Cap leaves no legal one", () => {
+  const plan = derivePlan(profile, burgerForLunch, afternoon);
+
+  // The burger spent the Cap, so nothing in the closed set obeys it. The day
+  // still gets prescribed: the lowest saturated fat available, flagged.
+  expect(
+    plan.directives
+      .filter(({ slotId }) => slotId === "eveningSnack" || slotId === "dinner")
+      .map(({ slotId, meal, state }) => ({ slotId, meal: meal?.id, state })),
+  ).toEqual([
+    { slotId: "eveningSnack", meal: "greekYogurt", state: "closestAchievable" },
+    { slotId: "dinner", meal: "greekYogurt", state: "closestAchievable" },
+  ]);
+});
