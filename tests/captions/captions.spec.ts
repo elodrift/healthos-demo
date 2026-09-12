@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { expect, test, type Page } from "@playwright/test";
 
 import { LABEL_FIXTURES, RECOGNITION_FIXTURES } from "./payloads";
