@@ -18,7 +18,7 @@ export const metadata: Metadata = {
     "Today's Plan for the Athlete — Directives derived from Profile, Ledger, and clock.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
