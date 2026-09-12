@@ -6,7 +6,6 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  cacheComponents: true,
 };
 
 export default nextConfig;
