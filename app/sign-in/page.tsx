@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default async function SignInPage() {
   // Next 14.2: headers() is synchronous, unlike Next 15/16.
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await auth.api.getSession({ headers: await headers() });
   if (session?.user) redirect("/onboarding");
 
   return (

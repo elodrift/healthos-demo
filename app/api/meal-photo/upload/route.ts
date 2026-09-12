@@ -11,7 +11,7 @@ import { formatWallClock, readCaptureTime } from "@/lib/photo/capture-time";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
 import { assertNoResidualMetadata, MAX_PHOTO_BYTES, stripImageMetadata } from "@/lib/photo/strip-metadata";
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 // Strip + private store + a vision call. The default 10s is not enough headroom
 // for the model leg, and a timeout here would look to the user like a lost photo.
 export const maxDuration = 45;
@@ -35,7 +35,7 @@ export const maxDuration = 45;
  *    `supported: false` in lib/photo/strip-metadata.ts.
  */
 export async function POST(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return jsonPrivate({ error: "Not signed in." }, { status: 401 });
   }

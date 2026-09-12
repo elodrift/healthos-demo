@@ -10,7 +10,7 @@ import { wearableConnection } from "@/lib/db/schema";
 /** Same discipline as the community actions: no RLS, so scope every query by id. */
 async function getUserId(): Promise<string> {
   // Next 14.2: headers() is synchronous.
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new Error("Unauthorized");
   return session.user.id;
 }

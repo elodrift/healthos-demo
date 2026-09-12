@@ -37,7 +37,7 @@ import { jsonPrivate } from "@/lib/http";
 import { log } from "@/lib/log";
 import { chatMessage } from "@/lib/db/schema";
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 /**
  * Same measured order as lib/food/recognize.ts: on this project's current
@@ -93,7 +93,7 @@ function systemPrompt(snap: AgentSnapshot): string {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return jsonPrivate({ error: "Not signed in." }, { status: 401 });
   }

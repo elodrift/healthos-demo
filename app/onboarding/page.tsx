@@ -16,7 +16,7 @@ export const metadata: Metadata = {
   description: "Connect a wearable and set your goal contract.",
 };
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 /** The stored enum is a policy switch; users should never see its raw form. */
 const GOAL_MODE_LABELS: Record<string, string> = {
@@ -34,7 +34,7 @@ const GOAL_MODE_LABELS: Record<string, string> = {
  */
 export default async function OnboardingPage() {
   // Next 14.2: headers() is synchronous.
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/sign-in");
 
   const userId = session.user.id;

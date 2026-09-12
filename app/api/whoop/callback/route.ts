@@ -15,7 +15,7 @@ import { publicOrigin } from "@/lib/env";
 import { log } from "@/lib/log";
 import { WHOOP_STATE_COOKIE } from "@/lib/whoop/oauth-state";
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 /**
  * WHOOP redirects here after the user accepts or denies consent.
@@ -42,13 +42,13 @@ export async function GET(request: NextRequest) {
       new URL(`/connect/whoop?error=${encodeURIComponent(reason)}`, origin),
     );
 
-  // Next 14.2: cookies() and headers() are synchronous.
-  const jar = cookies();
+  // Next 14.2: (await cookies()) and (await headers()) are synchronous.
+  const jar = (await cookies());
   const expectedState = jar.get(WHOOP_STATE_COOKIE)?.value;
   // One-shot value: clear it on every path so a leaked state cannot be replayed.
   jar.delete(WHOOP_STATE_COOKIE);
 
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await (await headers()) });
   if (!session?.user) return NextResponse.redirect(new URL("/sign-in", origin));
 
   // WHOOP sends ?error=access_denied when the user declines. That is a normal

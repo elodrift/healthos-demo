@@ -25,7 +25,7 @@ export const metadata = {
  * fabricated nutrition attached to real restaurant names, and was deleted for it.
  */
 export default async function CommunityPage() {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/sign-in?next=/community");
 
   const [own, friendCheckIns, friends] = await Promise.all([

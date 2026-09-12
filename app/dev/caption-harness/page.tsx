@@ -22,7 +22,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 function pickRecognition(v: string | undefined) {
   return v && v in RECOGNITION_FIXTURES ? (v as keyof typeof RECOGNITION_FIXTURES) : null;

@@ -13,11 +13,11 @@ export const metadata: Metadata = {
   description: "Set the goal contract that drives daily orchestration.",
 };
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 export default async function GoalPage() {
   // Next 14.2: headers() is synchronous.
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/sign-in");
 
   const rows = await db
