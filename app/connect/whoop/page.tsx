@@ -15,15 +15,15 @@ export const metadata: Metadata = {
   description: "Connect your WHOOP account to run HealthOS in Live mode.",
 };
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 export default async function ConnectWhoopPage({
   searchParams,
 }: {
   searchParams: { error?: string; connected?: string };
 }) {
-  // Next 14.2: headers() is synchronous.
-  const session = await auth.api.getSession({ headers: headers() });
+  // Next 14.2: (await headers()) is synchronous.
+  const session = await await auth.api.getSession({ headers: await (await headers()) });
   // Carry the destination. Without `?next=` the sign-in form sends everyone to
   // /onboarding, so someone who set out to connect WHOOP signs in and silently
   // lands somewhere else — then reasonably reports "WHOOP doesn't connect".
@@ -55,7 +55,7 @@ export default async function ConnectWhoopPage({
     an invitation that cannot be accepted. Checking here means the reason is
     stated before the click, not after.
   */
-  const h = headers();
+  const h = (await headers());
   const runningOrigin = `${h.get("x-forwarded-proto") ?? "https"}://${
     h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000"
   }`;

@@ -25,7 +25,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { log } from "@/lib/log";
 import { checkRateLimit } from "@/lib/rate-limit";
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 /** Best-effort only — used to key a rate-limit bucket, never a security decision. */
 function clientIp(request: NextRequest): string {

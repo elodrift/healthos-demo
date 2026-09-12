@@ -15,7 +15,7 @@
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
     "plugins": [
       {
@@ -32,10 +32,14 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
   ],
-  "//": "Left exactly as `next build` wants it: Next rewrites this file on every build and re-adds '.next/types/**/*.ts', so any exclusion of .next here is silently undone. `npm run typecheck` uses tsconfig.typecheck.json instead, which Next does not touch.",
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "tests",
+    "tests/**/*.spec.ts",
+    "playwright.config.ts"
   ]
 }

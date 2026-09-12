@@ -35,7 +35,7 @@ import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 export async function GET(request: NextRequest) {
   // Next 14.2: headers() is synchronous.
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return jsonPrivate({ error: "Not signed in." }, { status: 401 });
   }

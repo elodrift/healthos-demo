@@ -23,7 +23,7 @@ export type DisconnectResult =
  */
 export async function disconnectWhoop(): Promise<DisconnectResult> {
   // Next 14.2: headers() is synchronous here.
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return { ok: false, error: "You are not signed in." };
 
   try {

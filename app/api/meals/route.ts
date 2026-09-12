@@ -29,7 +29,7 @@ import { jsonPrivate } from "@/lib/http";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
 import { checkRateLimit, tooManyRequests } from "@/lib/rate-limit";
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 const Body = z.object({
   description: z.string().min(1).max(200),
@@ -74,7 +74,7 @@ const Body = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return jsonPrivate({ error: "Not signed in." }, { status: 401 });
 
   const limit = checkRateLimit("write", session.user.id);
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) return jsonPrivate({ error: "Not signed in." }, { status: 401 });
 
   const timeZone = request.nextUrl.searchParams.get("tz") ?? "UTC";

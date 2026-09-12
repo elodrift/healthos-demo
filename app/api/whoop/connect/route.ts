@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth";
 import { WhoopAuthError, whoopAuthorizeUrl, whoopOriginProblem } from "@/lib/whoop/client";
 import { WHOOP_STATE_COOKIE } from "@/lib/whoop/oauth-state";
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 /**
  * Start the WHOOP OAuth flow.
@@ -16,10 +16,10 @@ export const dynamic = "force-dynamic";
  * victim's session.
  */
 export async function GET() {
-  // Next 14.2: headers() and cookies() are synchronous.
-  const session = await auth.api.getSession({ headers: headers() });
+  // Next 14.2: (await headers()) and cookies() are synchronous.
+  const session = await await auth.api.getSession({ headers: await (await headers()) });
   if (!session?.user) {
-    return NextResponse.redirect(new URL("/sign-in", getOrigin()));
+    return NextResponse.redirect(new URL("/sign-in", await getOrigin()));
   }
 
   /*
@@ -39,7 +39,7 @@ export async function GET() {
     stop. Checked at request time rather than trusted, because the deployed host
     and the registered host drift apart routinely.
   */
-  const runningOrigin = getOrigin();
+  const runningOrigin = await getOrigin();
   const originProblem = whoopOriginProblem(runningOrigin);
   if (originProblem) {
     return NextResponse.redirect(
@@ -52,7 +52,7 @@ export async function GET() {
     const state = randomBytes(16).toString("hex"); // 32 chars; WHOOP requires >= 8
     authorizeUrl = whoopAuthorizeUrl(state);
 
-    cookies().set(WHOOP_STATE_COOKIE, state, {
+    (await cookies()).set(WHOOP_STATE_COOKIE, state, {
       httpOnly: true,
       secure: true,
       // `lax` still sends the cookie on the top-level GET redirect back from
@@ -69,15 +69,15 @@ export async function GET() {
         ? err.message
         : "Could not build the WHOOP authorization URL.";
     return NextResponse.redirect(
-      new URL(`/connect/whoop?error=${encodeURIComponent(message)}`, getOrigin()),
+      new URL(`/connect/whoop?error=${encodeURIComponent(message)}`, await getOrigin()),
     );
   }
 
   return NextResponse.redirect(authorizeUrl);
 }
 
-function getOrigin(): string {
-  const h = headers();
+async function getOrigin(): Promise<string> {
+  const h = (await headers());
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? "https";
   return `${proto}://${host}`;

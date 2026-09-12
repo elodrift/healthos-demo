@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 /** Per-user rows and a live transcript; never cache this. */
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 /**
  * The chat surface, restored.
@@ -31,7 +31,7 @@ export const dynamic = "force-dynamic";
  * rather than an addition to it.
  */
 export default async function ChatPage() {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/sign-in?next=/chat");
 
   const history = await db

@@ -11,10 +11,10 @@ export const metadata: Metadata = {
   description: "Add a photo of what you ate. Location data is removed before the photo is stored.",
 };
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 export default async function LogPage() {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/sign-in?next=/log");
 
   return (

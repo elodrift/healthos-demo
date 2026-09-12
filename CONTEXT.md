@@ -1,72 +1,97 @@
-# CONTEXT — the language of this codebase
+# HealthOS
 
-## The core idea
-A number about food is a *claim*. Every claim carries how it is known.
-Presenting an inferred number as a measured one is the one unforgivable bug.
+HealthOS is a proactive orchestration layer over health trackers. Where a tracker records what happened, HealthOS decides what should happen next: it derives a day of eating and training from the Athlete's goals and blood biomarkers, then re-routes that day as reality deviates from it.
 
-## Vocabulary
-- **MEASURED** — from a scale or a manufacturer's label.
-- **ASSUMED / estimated** — inferred. Almost everything is this.
-- **portionBasis (this repo's, barcode path only)** — how a *logged* portion
-  size is known.
-  - `MANUFACTURER`: the packet publishes a serving size.
-  - `UNKNOWN`: nothing published; the user must supply grams. Never invent one.
-  - Scoped to the barcode/logged-meal path only. Do **not** merge with the
-    engine's `PortionBasis` below — same English word, deliberately different
-    enum, deliberately not unified (2026-08-20 grill).
-- **weighed** — the user put it on a scale. A barcode scan alone is NOT weighed.
-- **estimated: false** — only when source is `barcode` AND `weighed` is true.
-- **floor vs target** — different promises. Clearing a floor is a success;
-  missing a target is not. `proteinKind` decides which verb the UI uses.
-- **confidence (app-level)** — LOW / MEDIUM / HIGH, describing what the *user
-  accepted*, measured post-confirm. Do not confuse with `provenance.confidence`
-  below, which is the engine's own pre-confirm certainty — namespaced apart on
-  purpose so one word doesn't carry two meanings (2026-08-20 grill).
-- **controlLevel** — FULL / PARTIAL / MINIMAL / UNKNOWN.
-- **timeBasis** — `photo-capture` or `upload`: which clock filed the meal.
-- **local day** — a *logged* meal belongs to the user's local day, never the
-  server's. See **profile-local day** below for the related but distinct
-  concept governing which day a *live plan* belongs to.
-- **§4.11** — the rule against presenting the app's guess as the user's intent.
+## The Athlete
 
-## Engine-side vocabulary consumed by this repo (2026-08-20 grill)
-- **lane** — the engine's `ParseLane` (engine `domain.py:507`): exactly two
-  values, `DETERMINISTIC` | `LLM`, naming which pipeline produced a
-  *parsed* number. Scoped strictly to parsed/logged numbers. A
-  planner-computed suggestion has no parse and therefore no `lane` — do not
-  widen this enum to cover "engine default policy" for a suggestion; that
-  merges two meanings into one field, the same bug portionBasis avoids above.
-- **provenance** — the namespaced object `{ lane, confidence, portionBasis }`
-  the engine attaches to a parsed/logged number. One shape, matching the
-  engine's own three-claim vocabulary exactly — this repo does not maintain a
-  parallel field (e.g. no `engineConfidence`).
-- **planner provenance** — the *different* provenance vocabulary a
-  planner-computed suggestion (not yet eaten, nothing parsed) carries instead
-  of `{ lane, confidence, portionBasis }`. **Not yet defined** — open item
-  owned by the engine side (see the read-API ticket). Do not invent this
-  vocabulary from the consumer side.
-- **PortionBasis (engine, canonical for anything the engine emits)** —
-  `MEASURED | COUNTED | DEFAULT | STATED_MACROS | MODEL_ESTIMATE`. Describes
-  how a *parse* derived a portion, not how a *plan* sized one — the same gap
-  `planner provenance` above exists to close.
-- **profile-local day** — the day a live plan belongs to, keyed to the user's
-  **profile timezone**, not the client device's current local day and not the
-  server's write clock. Per Decision 10: day and session derive from
-  `occurred_at`, never the write clock. A travelling device must not silently
-  invalidate a correct plan by asserting its own day.
-- **wrong day** — a plan whose profile-local day doesn't match the current
-  profile-local day. A distinct failure state from **stale** (an old but
-  same-day plan) — yesterday's "what to eat now" is not stale-but-usable, it's
-  a plan for a day that no longer exists.
+**Athlete**:
+The person HealthOS plans for. The single subject of every Plan, Directive, and Confirmation in the system.
+_Avoid_: user, client, patient, member
 
-## The engine boundary (ADR-023, binding)
-Clinical rules live only in the Python engine. This repo renders what the engine
-computes and never decides a medical constraint. No floor, ceiling, cutoff or
-interaction rule may be implemented in TypeScript.
+**Profile**:
+The durable set of facts HealthOS plans from — the Athlete's Goals, Biomarkers, Slots, dietary constraints, and curated Meals. Established at onboarding and changed rarely.
+_Avoid_: Onboarding Vault, user profile, settings, account
 
-**§6 (2026-08-20 grill):** this extends to captions. The engine emits the
-authoritative caption sentence alongside its structured claims; this repo may
-compose *presentation* from the claims (badges, ordering, emphasis, a
-freshness wrapper built from a raw `computedAt` around the engine's sentence)
-but may never compose a sentence that asserts anything clinical. A sentence
-assembled in TypeScript is one step from TypeScript deciding what's true.
+**Goal**:
+A long-horizon outcome the Athlete is working toward, stated in words. A Goal carries no arithmetic; it selects which Targets matter.
+_Avoid_: objective, aim, aspiration
+
+**Macro Timeline**:
+The mapping that turns a Goal into the day's Macro Targets. Where the Goal is the words, the Macro Timeline is the numbers they resolve to.
+_Avoid_: macro plan, calorie plan, formula
+
+**Biomarker**:
+A measured blood value that HealthOS plans against, such as cholesterol or uric acid.
+_Avoid_: lab value, marker, blood test
+
+**Target**:
+A quantity of a single Macro that the day should land on, taken from the Macro Timeline. A Target is aimed at, and may be missed.
+_Avoid_: goal, limit, threshold
+
+**Cap**:
+A daily ceiling the day must stay under, derived from a Biomarker sitting outside its range — saturated fat for cholesterol, a purine and fructose allowance for uric acid. A Cap is not aimed at; it is obeyed. Caps outrank Targets: HealthOS will under-shoot a Target before it will break a Cap.
+_Avoid_: limit, threshold, restriction, constraint
+
+**Macro**:
+A quantity of protein, carbohydrate, or fat, in grams.
+_Avoid_: nutrient, macronutrient
+
+## The Plan
+
+**Plan**:
+The full set of Directives for one day, ordered in time. There is exactly one Plan per day, and it is derived rather than stored.
+_Avoid_: schedule, itinerary, program, routine
+
+**Slot**:
+One of the fixed structural blocks a day is divided into, each carrying a share of the day's Targets and holding exactly one Directive. Slots are defined in the Profile and give a Directive its time.
+_Avoid_: block, window, mealtime, session
+
+**Directive**:
+One prescribed action placed at a time in a Plan: a Meal, a training session, a hydration cue. The unit the Athlete confirms, swaps, or deviates from.
+_Avoid_: task, todo, recommendation, suggestion, reminder
+
+**Meal**:
+One pre-costed eating option defined in the Profile, with a known Footprint. The closed set of Meals is the only universe a Swap draws from.
+_Avoid_: food, dish, recipe, menu item
+
+**Footprint**:
+The full nutritional cost of one eating event, held as a single unit: its Macros, its saturated fat, its purine and fructose load, and its Glycaemic Load. Every Meal carries one, and so does every Deviation.
+_Avoid_: nutrition, macros, cost, nutritional profile
+
+**Commitment**:
+An external obligation from the Athlete's calendar that occupies time and constrains where Directives can be placed.
+_Avoid_: meeting, event, appointment
+
+**Swap**:
+Replacing one Directive with an alternative that satisfies the same Targets. Offered by HealthOS, chosen by the Athlete.
+_Avoid_: substitute, alternative, replace
+
+**Closest Achievable**:
+The state of a Plan whose remaining Slots cannot reach the day's Targets under any combination of Meals, so HealthOS prescribes the nearest day it can and says so. A Closest Achievable Plan adds as little to an exceeded Cap as it can.
+_Avoid_: best effort, fallback, degraded, partial
+
+## Reality
+
+**Confirmation**:
+The Athlete's tap asserting that a Directive happened as prescribed. The cheapest possible input, and the default path.
+_Avoid_: log, check-in, entry, tracking
+
+**Deviation**:
+A gap between what a Directive prescribed and what the Athlete actually did — eating something else, skipping, training late. A Deviation carries the Footprint of what actually happened and is not confined to the Profile's Meals. A Deviation is an input, never a failure.
+_Avoid_: cheat, slip, violation, non-compliance, failure
+
+**Ledger**:
+The append-only record of every Confirmation and Deviation. Together with the Profile and the current time, it is the complete input to a Plan.
+_Avoid_: history, log, event store, journal
+
+**Reroute**:
+The recalculation of every remaining Directive in today's Plan after a Deviation, so the day lands as close to its Targets as its Caps allow. Named for the map metaphor: the route changes, the destination does not.
+_Avoid_: recalculation, adjustment, correction, replan
+
+**Headroom**:
+What remains of the day's Targets and Caps after every Confirmation and Deviation so far — the budget a Reroute has to work with. Headroom on a Target may go negative; Headroom on a Cap may not be spent past zero.
+_Avoid_: remaining macros, budget, allowance
+
+**Glycaemic Load**:
+A modelled estimate of the glycaemic impact of the Meals confirmed so far in a day, summed from per-Meal values held in the Profile. It is estimated from composition, never measured — HealthOS has no sensor.
+_Avoid_: glucose, blood sugar, glucose stability, glycaemic index

@@ -1,32 +1,32 @@
-import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import type { Metadata } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
-const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
-  title: "HealthOS — your health, orchestrated",
-  // Not "play one simulated day" — the scripted demo it referred to has been
-  // deleted, and this is the text that shows up in link previews and search.
+  title: "HealthOS",
   description:
-    "Nutrition and training that adapt to your own recovery and sleep the moment life changes — honest about uncertainty, and never inventing a number.",
+    "Today's Plan for the Athlete — Directives derived from Profile, Ledger, and clock.",
 };
 
-export const viewport: Viewport = {
-  themeColor: "#0A0F1E",
-  width: "device-width",
-  initialScale: 1,
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`bg-base-950 ${inter.variable} ${mono.variable}`}>
-      <body className="min-h-dvh bg-base-950 font-sans text-ink-hi antialiased">{children}</body>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full flex flex-col bg-stone-50 text-zinc-900">
+        {children}
+      </body>
     </html>
   );
 }

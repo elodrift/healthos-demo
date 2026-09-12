@@ -1,68 +1,26 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-html {
-  color-scheme: dark;
-  -webkit-text-size-adjust: 100%;
+:root {
+  --background: #fafaf9;
+  --foreground: #18181b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
 }
 
 body {
-  background: #05070d;
-  color: #f4f7fb;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-.tabular-nums {
-  font-variant-numeric: tabular-nums;
-}
-
-/* One visible focus treatment for every interactive element. */
-:focus-visible {
-  outline: 2px solid #3ddc97;
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
-/* Taps shouldn't flash a grey box on the chips. */
-button {
-  -webkit-tap-highlight-color: transparent;
-}
-
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-thumb {
-  background: #22304a;
-  border-radius: 999px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-/* standard property, for browsers that no longer ship the -webkit- ones */
-@supports (scrollbar-color: auto) {
-  * {
-    scrollbar-color: #22304a transparent;
-    scrollbar-width: thin;
-  }
-}
-
-/*
- * This demo auto-plays: numbers count, the stage dims, cards spring in.
- * Motion is the product here, so we don't remove it blindly — we collapse it to
- * near-instant state changes, which keeps the story readable without the
- * vestibular load. Component-level animations also read the same signal via
- * framer-motion's useReducedMotion.
- */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
 }

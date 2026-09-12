@@ -6,7 +6,7 @@ import { auth } from "@/lib/auth";
 import { log } from "@/lib/log";
 import { mealPhotoPrefix } from "@/lib/photo/photo-path";
 
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 /**
  * Serve a private meal photo to its owner.
@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
  * any signed-in user could read any other user's photo by passing its pathname.
  */
 export async function GET(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401, headers: { "Cache-Control": "private, no-store" } });
   }

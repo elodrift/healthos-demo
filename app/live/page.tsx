@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 /** Reads a live third-party API and per-user rows; never cache this. */
-export const dynamic = "force-dynamic";
+// Removed for cacheComponents compatibility
 
 /**
  * Live mode — the only day view. The scripted /day replay it was once kept
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
  * own data.
  */
 export default async function LivePage() {
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) redirect("/sign-in?next=/live");
 
   const result = await buildLiveDay(session.user.id);

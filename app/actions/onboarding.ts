@@ -14,7 +14,7 @@ import { onboardingProfile } from "@/lib/db/schema";
  */
 async function getUserId(): Promise<string> {
   // Next 14.2: headers() is synchronous.
-  const session = await auth.api.getSession({ headers: headers() });
+  const session = await await auth.api.getSession({ headers: await headers() });
   if (!session?.user) throw new Error("Unauthorized");
   return session.user.id;
 }

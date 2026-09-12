@@ -1,91 +1,26 @@
-import Link from "next/link";
-import { Disclaimer } from "@/components/Disclaimer";
+"use client";
 
-const strip = [
-  // Was "your protein floor comes from your lipid panel, not a calculator",
-  // stated as present fact. Bloodwork upload is not built (onboarding says so
-  // in as many words), so the claim outran the code. This says what today's
-  // targets are actually derived from.
-  {
-    title: "Built from your own signals",
-    body: "Targets come from your goal contract and last night's recovery and sleep — not a generic calculator. Every one shows where it came from.",
-  },
-  {
-    title: "Adapts all day",
-    body: "Skipped session, unplanned restaurant, schedule chaos — targets revise the moment the day changes.",
-  },
-  // Was "a deterministic engine logs each decision with its cause — read the
-  // reasoning event by event". That described the scripted demo's engine pane,
-  // which has been deleted, so it became a promise the app no longer keeps.
-  // Replaced with what the food loop actually does today.
-  {
-    title: "Estimates admit they are estimates",
-    body: "Photograph a meal and you get an estimate with its confidence and caveats — yours to correct before anything is logged.",
-  },
-];
+import { useState } from "react";
 
-export default function LandingPage() {
+import { Dashboard } from "./_components/Dashboard";
+import type { Confirmation, Deviation, Ledger } from "@/src/engine/derive-plan";
+
+const MORNING = new Date("2026-09-10T06:00:00");
+
+export default function Home() {
+  const [ledger, setLedger] = useState<Ledger>([]);
+  const [now, setNow] = useState(MORNING);
+
+  const appendToLedger = (row: Confirmation | Deviation) => {
+    setLedger((prev) => [...prev, row]);
+  };
+
   return (
-    <main className="flex min-h-dvh flex-col">
-      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-5 pb-10 pt-8 lg:px-8">
-        <header className="flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <span
-              aria-hidden="true"
-              className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-green/15 font-mono text-[11px] font-bold text-accent-green"
-            >
-              OS
-            </span>
-            <span className="text-[15px] font-semibold tracking-tight">HealthOS</span>
-          </span>
-          <a
-            href="#how-it-decides"
-            className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-lo transition hover:text-accent-green"
-          >
-            How it decides
-          </a>
-        </header>
-
-        <section className="flex flex-1 flex-col justify-center py-14">
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent-green">
-            Built on your own data
-          </span>
-          <h1 className="mt-4 max-w-2xl text-pretty text-[34px] font-semibold leading-[1.1] tracking-tight text-ink-hi sm:text-5xl">
-            Your health, orchestrated. All day. Every day.
-          </h1>
-          <p className="mt-5 max-w-xl text-pretty text-[15px] leading-relaxed text-ink-mid sm:text-base">
-            {/* Not "grounded in your bloodwork" — that upload is not built yet. */}
-            HealthOS adapts your nutrition and training the moment life changes — grounded in your
-            own recovery data, honest about uncertainty.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center gap-4">
-            <Link
-              href="/sign-in"
-              className="rounded-full bg-accent-green px-7 py-3.5 text-[15px] font-semibold text-base-950 transition hover:brightness-110"
-            >
-              Get started
-            </Link>
-            <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-lo">
-              Connect WHOOP · your data stays yours
-            </span>
-          </div>
-        </section>
-
-        <section id="how-it-decides" className="scroll-mt-8 pb-4">
-          <div className="grid gap-3 sm:grid-cols-3">
-            {strip.map((card) => (
-              <div
-                key={card.title}
-                className="rounded-2xl border border-base-700 bg-base-850 px-4 py-5 shadow-card"
-              >
-                <h2 className="text-[15px] font-semibold text-ink-hi">{card.title}</h2>
-                <p className="mt-1.5 text-[13px] leading-relaxed text-ink-mid">{card.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-      <Disclaimer />
-    </main>
+    <Dashboard
+      ledger={ledger}
+      now={now}
+      onAppend={appendToLedger}
+      onNowChange={setNow}
+    />
   );
 }
